@@ -2,12 +2,12 @@
 <html lang="en" class="no-js">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Divyam Navin — Full-Stack Developer & Applied AI/ML</title>
     <meta name="description" content="Divyam Navin is an Information Technology undergraduate and full-stack developer building production web apps and applied AI/ML systems — LLM automation, multimodal prediction and computer vision." />
     <meta name="theme-color" content="#09090b" />
     <meta property="og:title" content="Divyam Navin — Full-Stack Developer & Applied AI/ML" />
-    <meta property="og:description" content="Production web apps and applied AI systems. React, Node.js, Python, LLMs, multimodal models." />
+    <meta property="og:description" content="An interactive journey through my work: production web apps and applied AI systems. React, Node.js, Python, LLMs, multimodal models." />
     <meta property="og:type" content="website" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -21,25 +21,37 @@
     <div class="loader" aria-hidden="true">
       <div class="loader__mark">DN</div>
       <div class="loader__count"><span data-loader-count>0</span>%</div>
+      <p class="loader__hello" data-hello></p>
     </div>
 
     <canvas class="webgl" aria-hidden="true"></canvas>
     <div class="grain" aria-hidden="true"></div>
 
+    <!-- labels that ride along with 3D objects -->
+    <div class="labels" aria-hidden="true">
+      <span class="geo-label geo-label--home" data-label-home><i></i>Divyam · Thane</span>
+      <span class="geo-label" data-label-visitor><i></i><span data-visitor-city>You</span></span>
+      <span class="geo-label geo-label--skill" data-label-skill><i></i><span data-skill-name></span></span>
+    </div>
+
     <header class="nav">
       <a class="nav__logo" href="#top" aria-label="Divyam Navin — back to top">
-        <span class="nav__logo-mark">DN</span>
+        <span class="nav__logo-mark" data-magnetic>DN</span>
         <span class="nav__logo-name">Divyam Navin</span>
       </a>
       <nav class="nav__links" id="nav-links" aria-label="Primary">
-        <a href="#about">About</a>
-        <a href="#experience">Experience</a>
-        <a href="#projects">Projects</a>
-        <a href="#skills">Skills</a>
-        <a href="#contact">Contact</a>
-        <a class="btn btn--small" href="/Divyam-Navin-Resume.pdf" target="_blank" rel="noopener">Résumé</a>
+        <a href="#about" data-scramble>About</a>
+        <a href="#experience" data-scramble>Experience</a>
+        <a href="#projects" data-scramble>Projects</a>
+        <a href="#skills" data-scramble>Skills</a>
+        <a href="#contact" data-scramble>Contact</a>
+        <div class="nav__tools">
+          <button class="btn btn--small btn--ghost" type="button" data-open-quick data-magnetic>Quick view</button>
+          <button class="btn btn--small btn--ghost btn--icon" type="button" data-open-palette data-magnetic aria-label="Open command menu" title="Command menu (Ctrl/⌘ K)"><kbd>⌘K</kbd></button>
+          <a class="btn btn--small" href="/Divyam-Navin-Resume.pdf" target="_blank" rel="noopener" data-magnetic>Résumé</a>
+        </div>
       </nav>
-      <button class="nav__toggle" aria-expanded="false" aria-controls="nav-links">
+      <button class="nav__toggle" type="button" aria-expanded="false" aria-controls="nav-links">
         <span class="sr-only">Menu</span><span></span><span></span>
       </button>
     </header>
@@ -48,13 +60,27 @@
       <span class="hud__index" data-hud-index>01</span>
       <span class="hud__sep">/</span>
       <span class="hud__total" data-hud-total>08</span>
+      <span class="hud__chapter" data-hud-chapter>Prologue</span>
       <span class="hud__label" data-hud-label>neural sphere</span>
     </div>
     <div class="progress" aria-hidden="true"><span data-progress></span></div>
 
+    <button class="sound" type="button" aria-pressed="false" data-sound data-magnetic>
+      <span class="sound__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="sound__label">Sound <span data-sound-state>off</span></span>
+    </button>
+
+    <div class="game" role="status" aria-live="polite" hidden>
+      <span>Catch the signal</span>
+      <span><b data-game-score>0</b> caught</span>
+      <span><b data-game-time>20</b>s</span>
+    </div>
+
+    <div class="toasts" role="status" aria-live="polite"></div>
+
     <main id="main">
-      <!-- HERO -->
-      <section class="hero" id="top" data-shape="0" data-x="0.4" data-label="neural sphere">
+      <!-- PROLOGUE -->
+      <section class="hero" id="top" data-shape="0" data-x="0.4" data-label="neural sphere" data-chapter="Prologue">
         <div class="wrap hero__inner">
           <p class="eyebrow" data-reveal>Full-Stack Developer · Applied AI / ML</p>
           <h1 class="hero__title" data-split>
@@ -66,13 +92,13 @@
               I build production web apps and applied AI systems — from React front-ends and Node back-ends to LLM pipelines and multimodal models.
             </p>
             <div class="hero__cta" data-reveal>
-              <a class="btn" href="#projects">See my work <span aria-hidden="true">→</span></a>
-              <a class="btn btn--ghost" href="/Divyam-Navin-Resume.pdf" target="_blank" rel="noopener">Download résumé</a>
+              <a class="btn" href="#about" data-magnetic>Begin the journey <span aria-hidden="true">↓</span></a>
+              <button class="btn btn--ghost" type="button" data-open-quick data-magnetic>30-second version</button>
             </div>
           </div>
           <div class="hero__meta" data-reveal>
             <span>Based in Thane, India</span>
-            <span class="hero__hint">Move your cursor or tap — the signal reacts</span>
+            <span class="hero__hint"><span class="only-fine">Move, click</span><span class="only-coarse">Tilt, tap</span> — the signal reacts</span>
           </div>
         </div>
       </section>
@@ -84,10 +110,12 @@
         </div>
       </div>
 
-      <!-- ABOUT -->
-      <section class="section" id="about" data-shape="1" data-x="0.46" data-label="monogram" aria-labelledby="about-title">
-        <div class="wrap">
-          <p class="section__num" data-reveal>01 — About</p>
+      <div class="interlude"><p data-split>Every system starts as <em>a single signal.</em></p></div>
+
+      <!-- CHAPTER 1 — ORIGIN -->
+      <section class="section" id="about" data-shape="1" data-x="0.46" data-label="monogram" data-chapter="Ch.01 Origin" aria-labelledby="about-title">
+        <div class="wrap panel">
+          <p class="section__num" data-reveal>Chapter 01 · Origin</p>
           <h2 class="section__title" id="about-title" data-split>Full stack, <em>and</em> the models behind it.</h2>
           <div class="col-text">
             <p class="body-lg" data-reveal>
@@ -99,9 +127,9 @@
           </div>
 
           <dl class="stats" data-reveal>
-            <div class="stat"><dt>CGPA, Year 2</dt><dd>9.74</dd></div>
-            <div class="stat"><dt>MHT-CET percentile</dt><dd>97.5</dd></div>
-            <div class="stat"><dt>Internships</dt><dd>3</dd></div>
+            <div class="stat"><dt>CGPA, Year 2</dt><dd data-count="9.74">9.74</dd></div>
+            <div class="stat"><dt>MHT-CET percentile</dt><dd data-count="97.5">97.5</dd></div>
+            <div class="stat"><dt>Internships</dt><dd data-count="3">3</dd></div>
             <div class="stat"><dt>Performer, IT branch</dt><dd>Top</dd></div>
           </dl>
 
@@ -121,10 +149,12 @@
         </div>
       </section>
 
-      <!-- EXPERIENCE -->
-      <section class="section" id="experience" data-shape="2" data-x="-0.46" data-label="double helix" aria-labelledby="exp-title">
-        <div class="wrap wrap--right">
-          <p class="section__num" data-reveal>02 — Experience</p>
+      <div class="interlude"><p data-split>Curiosity turned into <em>craft.</em></p></div>
+
+      <!-- CHAPTER 2 — CRAFT -->
+      <section class="section" id="experience" data-shape="2" data-x="-0.46" data-label="double helix" data-chapter="Ch.02 Craft" aria-labelledby="exp-title">
+        <div class="wrap wrap--right panel">
+          <p class="section__num" data-reveal>Chapter 02 · Craft</p>
           <h2 class="section__title" id="exp-title" data-split>Where I’ve <em>shipped.</em></h2>
           <ol class="roles">
             <li class="role" data-reveal>
@@ -158,14 +188,17 @@
         </div>
       </section>
 
-      <!-- PROJECTS -->
+      <div class="interlude"><p data-split>Then came <em>the experiments.</em></p></div>
+
+      <!-- CHAPTER 3 — EXPERIMENTS -->
       <section class="section section--projects" id="projects" aria-labelledby="proj-title">
         <div class="wrap">
-          <p class="section__num" data-reveal>03 — Selected projects</p>
+          <p class="section__num" data-reveal>Chapter 03 · Experiments</p>
           <h2 class="section__title" id="proj-title" data-split>Things I’ve <em>built.</em></h2>
+          <p class="section__hint" data-reveal>Keep scrolling — each project comes to life as you read.</p>
         </div>
 
-        <article class="project" data-shape="3" data-x="0.46" data-label="candlesticks" aria-labelledby="p1">
+        <article class="project" data-shape="3" data-x="0.46" data-label="live candlesticks" data-chapter="Ch.03 Experiments" aria-labelledby="p1">
           <div class="wrap">
             <div class="project__card" data-reveal>
               <p class="project__meta"><span>P/01</span><span>2025 — Present · Personal project</span></p>
@@ -178,7 +211,7 @@
           </div>
         </article>
 
-        <article class="project" data-shape="4" data-x="-0.46" data-label="leaf" aria-labelledby="p2">
+        <article class="project" data-shape="4" data-x="-0.46" data-label="growing leaf" data-chapter="Ch.03 Experiments" aria-labelledby="p2">
           <div class="wrap wrap--right">
             <div class="project__card" data-reveal>
               <p class="project__meta"><span>P/02</span><span>2025 · CSIRO problem statement</span></p>
@@ -189,7 +222,7 @@
           </div>
         </article>
 
-        <article class="project" data-shape="5" data-x="0.46" data-label="open book" aria-labelledby="p3">
+        <article class="project" data-shape="5" data-x="0.46" data-label="turning pages" data-chapter="Ch.03 Experiments" aria-labelledby="p3">
           <div class="wrap">
             <div class="project__card" data-reveal>
               <p class="project__meta"><span>P/03</span><span>2024 — 2025 · Academic project</span></p>
@@ -201,43 +234,52 @@
         </article>
       </section>
 
-      <!-- SKILLS -->
-      <section class="section" id="skills" data-shape="6" data-x="-0.46" data-label="lattice" aria-labelledby="skills-title">
-        <div class="wrap wrap--right">
-          <p class="section__num" data-reveal>04 — Skills</p>
+      <div class="interlude"><p data-split>Each one left behind <em>a tool.</em></p></div>
+
+      <!-- CHAPTER 4 — TOOLKIT -->
+      <section class="section drag-zone" id="skills" data-shape="6" data-x="-0.46" data-label="skill constellation" data-chapter="Ch.04 Toolkit" data-cursor="Drag" aria-labelledby="skills-title">
+        <div class="wrap wrap--right panel">
+          <p class="section__num" data-reveal>Chapter 04 · Toolkit</p>
           <h2 class="section__title" id="skills-title" data-split>The <em>toolkit.</em></h2>
+          <p class="section__hint" data-reveal><span class="only-fine">Hover a skill to find it in the constellation — drag the empty space to spin it.</span><span class="only-coarse">Tap a skill to find it in the constellation — swipe sideways to spin it.</span></p>
           <div class="skills">
             <div class="skill-group" data-reveal>
               <h3 class="label">Languages</h3>
-              <ul class="tags tags--lg"><li>Python</li><li>JavaScript</li><li>SQL</li><li>HTML5</li><li>CSS3</li></ul>
+              <ul class="tags tags--lg"><li><button type="button" data-skill>Python</button></li><li><button type="button" data-skill>JavaScript</button></li><li><button type="button" data-skill>SQL</button></li><li><button type="button" data-skill>HTML5</button></li><li><button type="button" data-skill>CSS3</button></li></ul>
             </div>
             <div class="skill-group" data-reveal>
               <h3 class="label">Web</h3>
-              <ul class="tags tags--lg"><li>React.js</li><li>Node.js</li><li>Express.js</li><li>REST APIs</li><li>Responsive UI/UX</li></ul>
+              <ul class="tags tags--lg"><li><button type="button" data-skill>React.js</button></li><li><button type="button" data-skill>Node.js</button></li><li><button type="button" data-skill>Express.js</button></li><li><button type="button" data-skill>REST APIs</button></li><li><button type="button" data-skill>Responsive UI/UX</button></li></ul>
             </div>
             <div class="skill-group" data-reveal>
               <h3 class="label">AI / ML</h3>
-              <ul class="tags tags--lg"><li>Prompt engineering</li><li>LLM integration (Gemini API)</li><li>Data collection &amp; cleaning</li><li>Multimodal modelling</li><li>CNNs / Deep learning</li><li>pandas</li><li>NumPy</li><li>scikit-learn</li></ul>
+              <ul class="tags tags--lg"><li><button type="button" data-skill>Prompt engineering</button></li><li><button type="button" data-skill>LLM integration (Gemini API)</button></li><li><button type="button" data-skill>Data collection &amp; cleaning</button></li><li><button type="button" data-skill>Multimodal modelling</button></li><li><button type="button" data-skill>CNNs / Deep learning</button></li><li><button type="button" data-skill>pandas</button></li><li><button type="button" data-skill>NumPy</button></li><li><button type="button" data-skill>scikit-learn</button></li></ul>
             </div>
             <div class="skill-group" data-reveal>
               <h3 class="label">Data &amp; tools</h3>
-              <ul class="tags tags--lg"><li>MongoDB</li><li>MySQL</li><li>Git / GitHub</li><li>Cloudflare Workers</li><li>Vercel</li><li>Railway</li><li>Render</li></ul>
+              <ul class="tags tags--lg"><li><button type="button" data-skill>MongoDB</button></li><li><button type="button" data-skill>MySQL</button></li><li><button type="button" data-skill>Git / GitHub</button></li><li><button type="button" data-skill>Cloudflare Workers</button></li><li><button type="button" data-skill>Vercel</button></li><li><button type="button" data-skill>Railway</button></li><li><button type="button" data-skill>Render</button></li></ul>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- CONTACT -->
-      <section class="section contact" id="contact" data-shape="7" data-x="0" data-y="-0.78" data-dim="0.85" data-label="globe" aria-labelledby="contact-title">
+      <div class="interlude"><p data-split>Now the signal is <em>yours to answer.</em></p></div>
+
+      <!-- EPILOGUE — TRANSMISSION -->
+      <section class="section contact drag-zone" id="contact" data-shape="7" data-x="0" data-y="-0.7" data-dim="0.85" data-label="globe" data-chapter="Epilogue" data-cursor="Drag" aria-labelledby="contact-title">
         <div class="wrap contact__inner">
-          <p class="section__num" data-reveal>05 — Contact</p>
+          <p class="section__num" data-reveal>Epilogue · Transmission</p>
           <h2 class="contact__title" id="contact-title" data-split>Let’s build <em>something.</em></h2>
-          <a class="contact__email" href="mailto:divyamnavin@gmail.com" data-reveal>divyamnavin@gmail.com</a>
+          <div class="contact__email-row" data-reveal>
+            <a class="contact__email" href="mailto:divyamnavin@gmail.com">divyamnavin@gmail.com</a>
+            <button class="btn btn--small btn--ghost" type="button" data-copy-email data-magnetic>Copy</button>
+          </div>
           <ul class="contact__links" data-reveal>
-            <li><a href="https://www.linkedin.com/in/divyam-navin" target="_blank" rel="noopener">LinkedIn <span aria-hidden="true">↗</span></a></li>
-            <li><a href="https://github.com/Divyam1909" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></li>
-            <li><a href="/Divyam-Navin-Resume.pdf" target="_blank" rel="noopener">Résumé (PDF) <span aria-hidden="true">↗</span></a></li>
+            <li><a href="https://www.linkedin.com/in/divyam-navin" target="_blank" rel="noopener" data-scramble>LinkedIn ↗</a></li>
+            <li><a href="https://github.com/Divyam1909" target="_blank" rel="noopener" data-scramble>GitHub ↗</a></li>
+            <li><a href="/Divyam-Navin-Resume.pdf" target="_blank" rel="noopener" data-scramble>Résumé (PDF) ↗</a></li>
           </ul>
+          <p class="contact__time" data-reveal>It’s <span data-local-time>--:--</span> in Thane, India <span class="contact__sep">·</span> <span data-visitor-line>signals travel both ways</span></p>
         </div>
       </section>
     </main>
@@ -246,9 +288,72 @@
       <div class="wrap footer__inner">
         <span>© <span data-year>2026</span> Divyam Navin</span>
         <span>Built with Three.js — every shape is one particle system</span>
+        <button type="button" class="footer__link" data-open-palette>Press ⌘K / Ctrl K</button>
         <a href="#top">Back to top ↑</a>
       </div>
     </footer>
+
+    <!-- Command palette -->
+    <dialog class="palette" id="palette" aria-label="Command menu">
+      <form method="dialog" class="palette__box">
+        <div class="palette__search">
+          <span aria-hidden="true">⌘</span>
+          <input type="text" placeholder="Type a command or search…" autocomplete="off" spellcheck="false" aria-controls="palette-list" aria-activedescendant="" role="combobox" aria-expanded="true" data-palette-input />
+          <kbd>esc</kbd>
+        </div>
+        <ul class="palette__list" id="palette-list" role="listbox" data-palette-list></ul>
+        <p class="palette__foot"><span>↑↓ to move · ↵ to run</span><span data-achievements-count>0 / 7 achievements</span></p>
+      </form>
+    </dialog>
+
+    <!-- Recruiter quick view -->
+    <dialog class="quick" id="quick" aria-labelledby="quick-title">
+      <div class="quick__box">
+        <header class="quick__head">
+          <div>
+            <p class="eyebrow">Quick view · 30 seconds</p>
+            <h2 id="quick-title">Divyam Navin</h2>
+            <p class="quick__role">Full-Stack Developer · Applied AI / ML · Thane, India</p>
+          </div>
+          <button class="quick__close" type="button" data-close-quick aria-label="Close quick view">✕</button>
+        </header>
+        <div class="quick__grid">
+          <section>
+            <h3 class="label">Summary</h3>
+            <p>IT undergraduate (B.Tech 2023–2027, Fr. CRIT, CGPA 9.74) who builds and deploys production web apps (React, Node, Express, MongoDB) and applied AI/ML systems — LLM automation, multimodal prediction, computer vision.</p>
+          </section>
+          <section>
+            <h3 class="label">Experience</h3>
+            <ul class="quick__list">
+              <li><b>AI / Data Intern</b> — ZetaQ · Jan–Feb 2026<br />LLM (Gemini) pipeline turning NCERT PDFs into structured study material.</li>
+              <li><b>Full-Stack Web Dev Intern</b> — Thinking Engines · 2025<br />Company website, frontend + backend, design to deployment.</li>
+              <li><b>IT Engineer Intern</b> — Arms Robotics · Jun–Jul 2025<br />Website + real-time hardware-to-dashboard data architecture.</li>
+            </ul>
+          </section>
+          <section>
+            <h3 class="label">Projects</h3>
+            <ul class="quick__list">
+              <li><b>Multimodal Stock Prediction</b> — ~60–62% short-term directional accuracy (in progress)</li>
+              <li><b>Image-to-Biomass Estimation</b> — CNN + tabular model for biomass &amp; NDVI (CSIRO)</li>
+              <li><b>EduSage</b> — full-stack education platform with Gemini-powered interview &amp; quiz flow</li>
+            </ul>
+          </section>
+          <section>
+            <h3 class="label">Skills</h3>
+            <p>Python, JavaScript, SQL · React.js, Node.js, Express.js, REST APIs · LLM integration, prompt engineering, CNNs, pandas, NumPy, scikit-learn · MongoDB, MySQL, Git, Vercel, Cloudflare Workers</p>
+          </section>
+          <section>
+            <h3 class="label">Highlights</h3>
+            <p>MHT-CET 97.5 percentile · Among top performers in the IT branch · Multiple letters of recommendation</p>
+          </section>
+        </div>
+        <footer class="quick__foot">
+          <a class="btn" href="/Divyam-Navin-Resume.pdf" target="_blank" rel="noopener">Download résumé (PDF)</a>
+          <a class="btn btn--ghost" href="mailto:divyamnavin@gmail.com">Email me</a>
+          <a class="btn btn--ghost" href="https://www.linkedin.com/in/divyam-navin" target="_blank" rel="noopener">LinkedIn</a>
+        </footer>
+      </div>
+    </dialog>
 
     <script type="module" src="/src/main.js"></script>
   </body>

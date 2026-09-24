@@ -1,10 +1,32 @@
 # Divyam Navin — Portfolio
 
-Single-page portfolio built with Three.js. One particle system (20k points on desktop, 9k on mobile) morphs into a new shape for each section as you scroll: neural sphere, DN monogram, double helix, candlestick chart, leaf, open book, lattice and globe. The cursor pushes the particles around, and a click or tap sends out a shockwave.
+A single-page portfolio told as an interactive journey. One Three.js particle system (up to 20k points) travels through space from chapter to chapter, with the camera flying alongside it. At each stop the particles form a new shape:
 
-- All content is plain semantic HTML, so it stays readable for recruiters, screen readers and search engines. The WebGL canvas is decorative only.
-- Respects `prefers-reduced-motion`: smooth scrolling, animations and particle motion are turned off.
-- Falls back to a static gradient when WebGL isn't available.
+| Chapter | Shape | Interaction |
+| --- | --- | --- |
+| Prologue | Neural sphere | Big-bang intro: particles collapse out of chaos |
+| Ch.01 Origin | "DN" monogram | |
+| Ch.02 Craft | Double helix | |
+| Ch.03 Experiments | Candlesticks → leaf → book | Scene progresses as you read: candles draw in, the leaf grows, the pages turn |
+| Ch.04 Toolkit | Skill lattice | Hover or tap a skill to light it up and link it to related skills; drag to spin |
+| Epilogue | Globe (real continents) | Pin on Thane, arcs to tech hubs, your approximate location from your time zone; drag to spin |
+
+**Everywhere:** the cursor pushes particles aside, a click or tap sends a shockwave, and phones respond to tilt (gyroscope).
+
+**Extras**
+- **Quick view:** a 30-second recruiter summary in a dialog.
+- **⌘K / Ctrl K** (or `/`): command palette to jump to sections, copy your email, open the résumé, toggle sound or play the game.
+- **Generative sound**, off by default: a drone that responds to scroll, wind during flights, and plucks on clicks.
+- **Mini-game** "Catch the signal" (from the palette), with 7 achievements stored in `localStorage`.
+- **Easter egg:** type `hello` or enter the Konami code.
+- **Visual effects:** bloom, chromatic-aberration glitch during flights, warp streaks, custom cursor, magnetic buttons, scrambling text.
+
+**Accessibility and performance**
+- All content is semantic HTML; the canvas is decorative only.
+- Respects `prefers-reduced-motion`: no flights, intro, smooth scroll or animations.
+- Adaptive quality tiers (particle count, pixel ratio, bloom and post-processing). The site steps down automatically if frames drop. Force a tier with `?quality=0|1|2`.
+- On phones, each chapter shows its 3D shape on an empty "stage" above solid, readable text panels, with backdrop blur and grain turned off.
+- Falls back to a static page when WebGL isn't available.
 
 ## Develop
 
@@ -15,12 +37,13 @@ npm run build    # production build → dist/
 npm run preview  # serve the build
 ```
 
-## Deploy
+Deploy `dist/` to any static host (Vercel or Netlify: build command `npm run build`, output directory `dist`).
 
-Static output in `dist/`. On Vercel or Netlify: build command `npm run build`, output directory `dist`.
+## Where things live
 
-## Edit content
-
-- Text: `index.html`
-- Résumé download: `public/Divyam-Navin-Resume.pdf`
-- Shapes: `src/shapes.js`. Each section's `data-shape`, `data-x`, `data-y` and `data-dim` attributes set which shape it shows and where.
+- Content: `index.html`. Each chapter's `data-shape`, `data-x`, `data-y`, `data-dim` and `data-chapter` attributes drive the 3D.
+- `src/scene.js`: renderer, shaders, camera flight, post-processing, globe and lattice rigs, game.
+- `src/shapes.js`: point-cloud generators. `src/landmask.js` is a compact world land mask (Natural Earth, public domain).
+- `src/ui.js`: cursor, magnetic buttons, scramble text, toasts, achievements, palette and quick view.
+- `src/audio.js`: WebAudio sound design.
+- `src/main.js`: wires everything together.
