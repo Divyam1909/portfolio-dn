@@ -83,6 +83,32 @@ body.no-webgl {
 
 main, .footer { position: relative; z-index: 2; }
 
+/* Light leaks: warm film-exposure bleeds at the edges; they drift, move per chapter and flare on each change */
+.leaks { --half: 40vmax; position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; mix-blend-mode: screen; }
+.no-js .leaks { display: none; }
+.leak {
+  position: absolute; width: 80vmax; height: 80vmax; left: 0; top: 0;
+  opacity: var(--o, 0.32);
+  transform: translate(var(--x, 0), var(--y, 0));
+  transition: transform 2.6s var(--ease), opacity 2.2s var(--ease);
+}
+.leak i {
+  position: absolute; inset: 0; border-radius: 50%;
+  animation: leak-drift 22s ease-in-out infinite alternate;
+}
+.leak--a { --x: -42vmax; --y: -46vmax; }
+.leak--a i { background: radial-gradient(closest-side, rgba(255, 138, 64, 0.55), rgba(255, 84, 64, 0.18) 45%, transparent 72%); }
+.leak--b { --x: 62vw; --y: 10vh; --o: 0.24; }
+.leak--b i { background: radial-gradient(closest-side, rgba(255, 77, 128, 0.45), rgba(170, 60, 255, 0.14) 48%, transparent 72%); animation-duration: 27s; animation-delay: -9s; }
+.leak--c { --x: -30vmax; --y: 55vh; --o: 0.18; }
+.leak--c i { background: radial-gradient(closest-side, rgba(255, 196, 92, 0.42), rgba(200, 255, 77, 0.1) 50%, transparent 72%); animation-duration: 31s; animation-delay: -4s; }
+.leaks.is-flash .leak { opacity: calc(var(--o, 0.32) * 2.4); transition: transform 2.6s var(--ease), opacity 0.35s ease-out; }
+@keyframes leak-drift {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6vmax, 3vmax) scale(1.12); }
+  100% { transform: translate(-4vmax, 6vmax) scale(0.94); }
+}
+
 /* ---------- Loader ---------- */
 .loader {
   position: fixed; inset: 0; z-index: 90;
@@ -433,6 +459,7 @@ button.btn { font-family: inherit; cursor: pointer; }
   background: rgba(9, 9, 11, 0.72); border: 1px solid var(--line);
   transition: opacity 0.3s;
 }
+.geo-label.is-left { margin-left: -14px; }
 .geo-label i { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--fg); vertical-align: 1px; }
 .geo-label--home i, .geo-label--skill i { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 .geo-label--skill { color: var(--accent); }
@@ -540,6 +567,8 @@ dialog::backdrop { background: rgba(5, 5, 7, 0.72); -webkit-backdrop-filter: blu
    ===================================================================== */
 @media (max-width: 899px) {
   .grain { display: none; }
+  .leaks { opacity: 0.6; --half: 60vmax; }
+  .leak { width: 120vmax; height: 120vmax; }
   .section[data-shape]:not(.contact), .project { padding-top: 58svh; }
   .section[data-shape]:not(.contact) > .panel,
   .project .project__card {
@@ -562,5 +591,7 @@ dialog::backdrop { background: rgba(5, 5, 7, 0.72); -webkit-backdrop-filter: blu
 
 @media (prefers-reduced-motion: reduce) {
   .sound.is-on .sound__bars i { animation: none; height: 8px; }
+  .leak i { animation: none; }
+  .leak, .leaks.is-flash .leak { transition: none; }
   .toast, .palette[open] .palette__box, .quick[open] .quick__box { transition: none; animation: none; }
 }

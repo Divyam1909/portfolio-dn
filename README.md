@@ -17,7 +17,8 @@ A single-page portfolio told as an interactive journey. One Three.js particle sy
 - **Quick view:** a 30-second recruiter summary in a dialog.
 - **⌘K / Ctrl K** (or `/`): command palette to jump to sections, copy your email, open the résumé, or toggle sound.
 - **Generative sound**, off by default: a drone that responds to scroll, wind during flights, and plucks on clicks.
-- **Visual effects:** bloom, chromatic-aberration glitch during flights, warp streaks, custom cursor, magnetic buttons, scrambling text.
+- **Atmosphere:** nebula fog clouds along the route, tinted per chapter (you fly through them), and warm light leaks at the screen edges that move and flare on every chapter change, on top of the film grain.
+- **Visual effects:** bloom (desktop), chromatic-aberration glitch during flights, warp streaks, custom cursor, magnetic buttons, scrambling text.
 
 **Accessibility and performance**
 - All content is semantic HTML; the canvas is decorative only.

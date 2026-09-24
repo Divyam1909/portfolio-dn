@@ -2,7 +2,7 @@ import {
   WebGLRenderer, Scene, PerspectiveCamera, BufferGeometry, BufferAttribute, Float32BufferAttribute,
   ShaderMaterial, Points, LineSegments, Line, Mesh, RingGeometry, CircleGeometry, LineBasicMaterial,
   MeshBasicMaterial, AdditiveBlending, Group, MathUtils, Vector2, Vector3, Color, DoubleSide,
-  LinearSRGBColorSpace,
+  LinearSRGBColorSpace, PlaneGeometry,
 } from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
@@ -61,7 +61,7 @@ attribute vec4 aRnd;
 attribute vec4 aOrder;
 
 uniform float uTime, uMorph, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uPulseT, uMouseF, uScale;
-uniform float uIntro, uLive3, uLive4, uLive5, uFocusAmt, uMouseR;
+uniform float uIntro, uLive3, uLive4, uLive5, uFocusAmt, uMouseR, uGain;
 uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase;
 uniform vec3 uSt[8];
 uniform vec2 uTilt;
@@ -173,7 +173,7 @@ void main(){
   vec3 col = aRnd.w > 0.84 ? uColB : (aRnd.w > 0.78 ? uColC : uColA);
   vColor = mix(col, uColB, clamp(force * 1.2 + ring + focus, 0., 1.));
   float dimOthers = 1. - uFocusAmt * w6 * 0.45 * (1. - focus);
-  vAlpha = uDim * alpha * dimOthers * (0.35 + 0.55 * aRnd.z) * (1. + force * 0.8 + focus)
+  vAlpha = uGain * uDim * alpha * dimOthers * (0.35 + 0.55 * aRnd.z) * (1. + force * 0.8 + focus)
          * smoothstep(0.3, 2.2, depth);
 }`
 
@@ -242,9 +242,54 @@ const GlitchShader = {
     }`,
 }
 
+// Nebula fog: soft noise clouds on camera-facing quads placed along the route.
+const FOG_VERT = /* glsl */ `
+uniform float uSize, uRot;
+varying vec2 vUv;
+varying float vFade;
+void main(){
+  vUv = uv;
+  vec4 mv = modelViewMatrix * vec4(0., 0., 0., 1.);
+  float c = cos(uRot), s = sin(uRot);
+  mv.xy += mat2(c, s, -s, c) * position.xy * uSize;
+  float depth = -mv.z;
+  vFade = smoothstep(0.6, 8., depth) * smoothstep(90., 34., depth);
+  gl_Position = projectionMatrix * mv;
+}`
+const FOG_FRAG = /* glsl */ `
+uniform float uTime, uSeed, uAlpha;
+uniform vec3 uColA, uColB;
+varying vec2 vUv;
+varying float vFade;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3. - 2. * f);
+  return mix(mix(hash(i), hash(i + vec2(1., 0.)), u.x), mix(hash(i + vec2(0., 1.)), hash(i + vec2(1., 1.)), u.x), u.y);
+}
+float fbm(vec2 p){
+  float v = 0., a = 0.5;
+  for (int i = 0; i < OCTAVES; i++) { v += a * noise(p); p = p * 2.03 + 17.1; a *= 0.5; }
+  return v;
+}
+void main(){
+  if (vFade < 0.002) discard;
+  vec2 c = vUv - 0.5;
+  float fall = smoothstep(0.5, 0.08, length(c));
+  vec2 q = c * 2.4 + uSeed;
+  float n = fbm(q + vec2(uTime * 0.018, -uTime * 0.013));
+  float m = fbm(q * 1.6 + n * 1.8 - uTime * 0.01);
+  float d = smoothstep(0.32, 0.92, m) * fall;
+  gl_FragColor = vec4(mix(uColA, uColB, n), d * uAlpha * vFade);
+}`
+// one colour pair per chapter station
+const FOG_COLORS = [
+  ['#3b5bff', '#c8ff4d'], ['#7a3cff', '#3b5bff'], ['#11b5a0', '#3b5bff'], ['#c8ff4d', '#11b5a0'],
+  ['#3ddc84', '#c8ff4d'], ['#ff9d3c', '#ff4d6d'], ['#8f5bff', '#ff4d6d'], ['#2f7bff', '#11b5a0'],
+]
+
 const TIERS = [
-  { count: 7000, pr: 1.25, bloom: false, post: false },
-  { count: 12000, pr: 1.6, bloom: true, post: true },
+  { count: 10000, pr: 1.5, bloom: false, post: false },
+  { count: 16000, pr: 1.75, bloom: true, post: true },
   { count: 20000, pr: 2, bloom: true, post: true },
 ]
 
@@ -297,7 +342,7 @@ export async function createScene(canvas, opts = {}) {
 
   const uniforms = {
     uTime: { value: 0 }, uMorph: { value: 0 }, uScatter: { value: 0 },
-    uSize: { value: coarse ? 24 : 21 }, uPR: { value: 1 }, uDim: { value: 1 },
+    uSize: { value: coarse ? 26 : 21 }, uPR: { value: 1 }, uDim: { value: 1 }, uGain: { value: 1 },
     uSpin: { value: 0 }, uSpinG: { value: 0 }, uScale: { value: 1 },
     uPulseT: { value: 10 }, uPulseO: { value: new Vector3() },
     uMouse: { value: new Vector3(99, 99, 0) }, uMouseF: { value: 0 }, uMouseR: { value: 0.9 },
@@ -352,6 +397,30 @@ export async function createScene(canvas, opts = {}) {
   }))
   warp.frustumCulled = false
   scene.add(warp)
+
+  // ---- Nebula fog along the route
+  const fogPlanes = []
+  const fogGeo = new PlaneGeometry(1, 1)
+  const fogOct = [3, 4, 4][tier]
+  stations.forEach((st, i) => {
+    for (let k = 0; k < 3; k++) {
+      const u = {
+        uTime: { value: 0 }, uSeed: { value: r() * 50 }, uAlpha: { value: (0.1 + r() * 0.06) * (coarse ? 0.65 : 1) },
+        uSize: { value: 15 + r() * 12 }, uRot: { value: r() * PI * 2 },
+        uColA: { value: hex(FOG_COLORS[i][k % 2]) }, uColB: { value: hex(FOG_COLORS[i][(k + 1) % 2]) },
+      }
+      const m = new Mesh(fogGeo, new ShaderMaterial({
+        vertexShader: FOG_VERT, fragmentShader: FOG_FRAG, uniforms: u, defines: { OCTAVES: fogOct },
+        transparent: true, depthWrite: false, depthTest: false, blending: AdditiveBlending,
+      }))
+      m.position.set(st.x + (r() - 0.5) * 12, st.y + (r() - 0.5) * 6, st.z - 4 - k * 3.5 - r() * 2)
+      m.frustumCulled = false
+      m.renderOrder = -1
+      m.userData.k = k
+      scene.add(m)
+      fogPlanes.push(m)
+    }
+  })
 
   // ---- Rigs: objects that ride along with a shape (same station, scale, tilt and spin)
   const makeRig = (i) => { const outer = new Group(); const inner = new Group(); outer.add(inner); scene.add(outer); return { i, outer, inner } }
@@ -411,7 +480,8 @@ export async function createScene(canvas, opts = {}) {
     if (!TIERS[tier].post) return
     composer = new EffectComposer(renderer)
     composer.addPass(new RenderPass(scene, camera))
-    if (TIERS[tier].bloom) {
+    // bloom smears dense shapes into blobs on small screens, so phones skip it
+    if (TIERS[tier].bloom && !coarse) {
       bloom = new UnrealBloomPass(new Vector2(innerWidth, innerHeight), 0.35, 0.5, 0.32)
       composer.addPass(bloom)
     }
@@ -427,8 +497,12 @@ export async function createScene(canvas, opts = {}) {
     renderer.setPixelRatio(pr)
     uniforms.uPR.value = dUni.uPR.value = pr
     geo.setDrawRange(0, Math.min(MAX, t.count))
+    fogPlanes.forEach((m) => (m.visible = m.userData.k <= tier))
     // fewer particles → slightly bigger ones so shapes keep their density
-    uniforms.uSize.value = (coarse ? 24 : 21) * Math.sqrt(20000 / Math.min(MAX, t.count)) ** 0.5
+    uniforms.uSize.value = (coarse ? 26 : 21) * Math.sqrt(20000 / Math.min(MAX, t.count)) ** 0.5
+    // without bloom the particles need more light of their own (mostly phones)
+    const count = Math.min(MAX, t.count)
+    uniforms.uGain.value = coarse ? 1.5 * Math.sqrt(10000 / count) : t.bloom ? 1 : 1.3
     renderer.setSize(innerWidth, innerHeight, false)
     buildPost()
   }
@@ -465,8 +539,8 @@ export async function createScene(canvas, opts = {}) {
         label: el.dataset.label || '',
         chapter: el.dataset.chapter || '',
         x: mobile ? 0 : parseFloat(el.dataset.x || '0'),
-        y: el.dataset.y ? parseFloat(el.dataset.y) : i === 0 ? (mobile ? 0.55 : 0.1) : 0,
-        dim: mobile ? (i === 0 ? 0.9 : 0.8) : parseFloat(el.dataset.dim || '1'),
+        y: el.dataset.y ? parseFloat(el.dataset.y) : i === 0 ? (mobile ? 0.6 : 0.1) : 0,
+        dim: mobile ? 1 : parseFloat(el.dataset.dim || '1'),
       }
     })
     for (let k = 0; k < stops.length - 1; k++) {
@@ -634,7 +708,8 @@ export async function createScene(canvas, opts = {}) {
     tilt.y += (ty - tilt.y) * (1 - Math.exp(-dt * 3))
     uniforms.uTilt.value.set(tilt.x, tilt.y)
 
-    const scale = MathUtils.clamp((halfW * 0.56) / 2.2, mobile ? 0.42 : 0.48, 0.82)
+    // phones: fill most of the stage width so the shapes read clearly
+    const scale = mobile ? MathUtils.clamp((halfW * 0.95) / 2.2, 0.42, 0.56) : MathUtils.clamp((halfW * 0.56) / 2.2, 0.48, 0.82)
     uniforms.uScale.value = scale
     uniforms.uMouseR.value = 0.95 * scale + 0.1
 
@@ -697,6 +772,7 @@ export async function createScene(canvas, opts = {}) {
     labelAt(labels.skill, focusTarget ? focusNode : null, latticeRig, rigAlpha(6) * focusTarget, true)
 
     dUni.uTime.value = time
+    for (const m of fogPlanes) m.material.uniforms.uTime.value = time
     const camSpeed = Math.abs(D * (tgt.morph - cur.morph)) * 4.5
     wUni.uWarp.value += ((reduced ? 0 : Math.min(camSpeed * 0.12, 4)) - wUni.uWarp.value) * (1 - Math.exp(-dt * 5))
 
@@ -745,7 +821,10 @@ export async function createScene(canvas, opts = {}) {
     }
     _w.project(camera)
     el.style.opacity = alpha
-    el.style.transform = `translate(${((_w.x + 1) / 2) * innerWidth}px, ${((1 - _w.y) / 2) * innerHeight}px)`
+    const sx = ((_w.x + 1) / 2) * innerWidth, sy = ((1 - _w.y) / 2) * innerHeight
+    const flip = sx > innerWidth * 0.62 // keep labels on screen near the right edge
+    el.classList.toggle('is-left', flip)
+    el.style.transform = `translate(${sx}px, ${sy}px)${flip ? ' translateX(-100%)' : ''}`
   }
 
   return {

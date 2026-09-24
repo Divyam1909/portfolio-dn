@@ -122,7 +122,29 @@ function startReveals() {
 /* ---------- HUD ---------- */
 const hud = $('.hud')
 const pad = (n) => String(n).padStart(2, '0')
+// light leaks move to a new composition and flare on every chapter change
+const leaks = $('.leaks')
+const LEAK_POSES = [
+  [[-42, -46], [62, 10], [-30, 55]], [[40, -50], [-40, 30], [55, 60]], [[-50, 10], [60, -30], [10, 70]],
+  [[50, 30], [-45, -40], [-20, 65]], [[-40, 45], [55, -35], [20, -60]], [[45, -45], [-50, 40], [60, 55]],
+  [[-45, -30], [50, 45], [-10, 70]], [[0, 55], [-55, -45], [60, -40]],
+]
+let leakTimer = 0
+function moveLeaks(i) {
+  const pose = LEAK_POSES[i % LEAK_POSES.length]
+  leaks.querySelectorAll('.leak').forEach((el, k) => {
+    // x in vw-ish, y in vh-ish; pulled partly off-screen so only the bleed shows
+    el.style.setProperty('--x', `calc(${pose[k][0]}vw - var(--half) + 50vw)`)
+    el.style.setProperty('--y', `calc(${pose[k][1]}vh - var(--half) + 50vh)`)
+  })
+  if (reduced) return
+  leaks.classList.add('is-flash')
+  clearTimeout(leakTimer)
+  leakTimer = setTimeout(() => leaks.classList.remove('is-flash'), 700)
+}
+
 function onShapeChange(i, total, label, chapter) {
+  moveLeaks(i)
   $('[data-hud-index]').textContent = pad(i + 1)
   $('[data-hud-total]').textContent = pad(total)
   const ch = $('[data-hud-chapter]')
