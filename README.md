@@ -15,10 +15,8 @@ A single-page portfolio told as an interactive journey. One Three.js particle sy
 
 **Extras**
 - **Quick view:** a 30-second recruiter summary in a dialog.
-- **⌘K / Ctrl K** (or `/`): command palette to jump to sections, copy your email, open the résumé, toggle sound or play the game.
+- **⌘K / Ctrl K** (or `/`): command palette to jump to sections, copy your email, open the résumé, or toggle sound.
 - **Generative sound**, off by default: a drone that responds to scroll, wind during flights, and plucks on clicks.
-- **Mini-game** "Catch the signal" (from the palette), with 7 achievements stored in `localStorage`.
-- **Easter egg:** type `hello` or enter the Konami code.
 - **Visual effects:** bloom, chromatic-aberration glitch during flights, warp streaks, custom cursor, magnetic buttons, scrambling text.
 
 **Accessibility and performance**
@@ -42,8 +40,8 @@ Deploy `dist/` to any static host (Vercel or Netlify: build command `npm run bui
 ## Where things live
 
 - Content: `index.html`. Each chapter's `data-shape`, `data-x`, `data-y`, `data-dim` and `data-chapter` attributes drive the 3D.
-- `src/scene.js`: renderer, shaders, camera flight, post-processing, globe and lattice rigs, game.
+- `src/scene.js`: renderer, shaders, camera flight, post-processing, globe and lattice rigs.
 - `src/shapes.js`: point-cloud generators. `src/landmask.js` is a compact world land mask (Natural Earth, public domain).
-- `src/ui.js`: cursor, magnetic buttons, scramble text, toasts, achievements, palette and quick view.
+- `src/ui.js`: cursor, magnetic buttons, scramble text, toasts, palette and quick view.
 - `src/audio.js`: WebAudio sound design.
 - `src/main.js`: wires everything together.

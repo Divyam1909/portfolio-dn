@@ -56,12 +56,12 @@ vec3 rotZ(vec3 p, float a){ float c=cos(a), s=sin(a); return vec3(p.x*c-p.y*s, p
 
 const VERT = /* glsl */ `
 attribute vec3 aS0; attribute vec3 aS1; attribute vec3 aS2; attribute vec3 aS3; attribute vec3 aS4;
-attribute vec3 aS5; attribute vec3 aS6; attribute vec3 aS7; attribute vec3 aS8;
+attribute vec3 aS5; attribute vec3 aS6; attribute vec3 aS7;
 attribute vec4 aRnd;
 attribute vec4 aOrder;
 
 uniform float uTime, uMorph, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uPulseT, uMouseF, uScale;
-uniform float uIntro, uEgg, uLive3, uLive4, uLive5, uFocusAmt, uMouseR;
+uniform float uIntro, uLive3, uLive4, uLive5, uFocusAmt, uMouseR;
 uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase;
 uniform vec3 uSt[8];
 uniform vec2 uTilt;
@@ -133,8 +133,6 @@ void main(){
   float w6 = (i0 == 6 ? 1. - fl : 0.) + (i1 == 6 ? fl : 0.);
   float focus = w6 * uFocusAmt * smoothstep(0.42, 0.0, distance(aS6, uFocus));
 
-  p = mix(p, aS8, uEgg);
-
   // mid-flight: particles swirl and scatter, then settle into the next shape
   p = rotY(p, tr * (aRnd.x - 0.5) * 1.6);
   float t = uTime * 0.22;
@@ -151,7 +149,7 @@ void main(){
   vec4 wp = vec4(p + station, 1.0);
 
   // globe: fade the far hemisphere so the continents read clearly
-  float w7 = ((i0 == 7 ? 1. - fl : 0.) + (i1 == 7 ? fl : 0.)) * (1. - uEgg);
+  float w7 = ((i0 == 7 ? 1. - fl : 0.) + (i1 == 7 ? fl : 0.));
   float facing = dot(normalize(p), normalize(cameraPosition - wp.xyz));
   alpha *= mix(1., 0.12 + 0.88 * smoothstep(-0.25, 0.3, facing), w7);
 
@@ -303,7 +301,7 @@ export async function createScene(canvas, opts = {}) {
     uSpin: { value: 0 }, uSpinG: { value: 0 }, uScale: { value: 1 },
     uPulseT: { value: 10 }, uPulseO: { value: new Vector3() },
     uMouse: { value: new Vector3(99, 99, 0) }, uMouseF: { value: 0 }, uMouseR: { value: 0.9 },
-    uIntro: { value: reducedMQ.matches ? 0 : 1 }, uEgg: { value: 0 },
+    uIntro: { value: reducedMQ.matches ? 0 : 1 },
     uLive3: { value: 1 }, uLive4: { value: 1 }, uLive5: { value: 0 },
     uFocus: { value: new Vector3() }, uFocusAmt: { value: 0 },
     uLeafBase: { value: new Vector3(...LEAF_BASE) },
@@ -405,18 +403,6 @@ export async function createScene(canvas, opts = {}) {
     arcGeo.setDrawRange(0, 0)
   }
 
-  // ---- Game orb
-  const orbGeo = new BufferGeometry()
-  orbGeo.setAttribute('position', new Float32BufferAttribute([0, 0, 0], 3))
-  const orbUni = { uPR: { value: 1 }, uTime: { value: 0 }, uAlpha: { value: 0 } }
-  const orb = new Points(orbGeo, new ShaderMaterial({
-    uniforms: orbUni, transparent: true, depthWrite: false, blending: AdditiveBlending,
-    vertexShader: `uniform float uPR, uTime; void main(){ vec4 mv = modelViewMatrix * vec4(position,1.); gl_Position = projectionMatrix * mv; gl_PointSize = (70. + sin(uTime*6.)*14.) * uPR / max(-mv.z, .1) * 6.; }`,
-    fragmentShader: `uniform float uAlpha; void main(){ float d = length(gl_PointCoord-.5); if(d>.5) discard; float core = smoothstep(.18,.0,d); float halo = pow(1.-d*2., 2.)*.6; gl_FragColor = vec4(mix(vec3(${hex(ACCENT).join(',')}), vec3(1.), core), (core+halo)*uAlpha); }`,
-  }))
-  orb.frustumCulled = false
-  scene.add(orb)
-
   // ---- Post-processing
   let composer = null, bloom = null, glitch = null
   function buildPost() {
@@ -439,7 +425,7 @@ export async function createScene(canvas, opts = {}) {
     const t = TIERS[tier]
     const pr = Math.min(devicePixelRatio || 1, t.pr)
     renderer.setPixelRatio(pr)
-    uniforms.uPR.value = dUni.uPR.value = orbUni.uPR.value = pr
+    uniforms.uPR.value = dUni.uPR.value = pr
     geo.setDrawRange(0, Math.min(MAX, t.count))
     // fewer particles → slightly bigger ones so shapes keep their density
     uniforms.uSize.value = (coarse ? 24 : 21) * Math.sqrt(20000 / Math.min(MAX, t.count)) ** 0.5
@@ -560,14 +546,12 @@ export async function createScene(canvas, opts = {}) {
     return out.copy(camera.position).addScaledVector(_v, t)
   }
 
-  let game = null
   addEventListener('pointerdown', (e) => {
     if (e.target.closest('a, button, input, textarea, select, label, dialog, [data-no-pulse]')) return
     const nx = (e.clientX / innerWidth) * 2 - 1, ny = -(e.clientY / innerHeight) * 2 + 1
     screenToWorld(nx, ny, uniforms.uPulseO.value)
     uniforms.uPulseT.value = 0
     onPulse?.(nx, ny)
-    if (game) gameHit(e.clientX, e.clientY)
   })
 
   let spinVel = 0, gDrag = 0
@@ -583,7 +567,6 @@ export async function createScene(canvas, opts = {}) {
   const A = { pos: new Vector3(), look: new Vector3() }, B = { pos: new Vector3(), look: new Vector3() }
   const off = new Vector3()
   let fpsFrames = 0, fpsTime = 0, fpsArmed = false
-  let egg = { t: 0, target: 0, hold: 0 }
   let intro = null
 
   function pose(out, i, p, st, reduced) {
@@ -677,7 +660,7 @@ export async function createScene(canvas, opts = {}) {
     uniforms.uMouseF.value += (mf - uniforms.uMouseF.value) * (1 - Math.exp(-dt * 4))
     if (!reduced) uniforms.uPulseT.value += dt
 
-    // intro (big bang) and the hidden shape
+    // intro (big bang)
     if (intro) {
       intro.t += dt
       const x = Math.min(1, intro.t / intro.dur)
@@ -687,14 +670,9 @@ export async function createScene(canvas, opts = {}) {
         const done = intro.done; intro = null; done()
       }
     }
-    if (egg.target || egg.t > 0) {
-      if (egg.target && egg.t >= 1) { egg.hold -= dt; if (egg.hold <= 0) egg.target = 0 }
-      egg.t = MathUtils.clamp(egg.t + (egg.target ? dt : -dt) / (reduced ? 0.01 : 1.1), 0, 1)
-      uniforms.uEgg.value = egg.t * egg.t * (3 - 2 * egg.t)
-    }
 
     // rigs follow their shapes
-    const rigAlpha = (i) => Math.max(0, 1 - Math.abs(j - i) * 2) * (1 - uniforms.uEgg.value)
+    const rigAlpha = (i) => Math.max(0, 1 - Math.abs(j - i) * 2)
     for (const rig of [latticeRig, globeRig]) {
       rig.outer.position.copy(st[rig.i])
       rig.outer.scale.setScalar(scale)
@@ -722,9 +700,6 @@ export async function createScene(canvas, opts = {}) {
     const camSpeed = Math.abs(D * (tgt.morph - cur.morph)) * 4.5
     wUni.uWarp.value += ((reduced ? 0 : Math.min(camSpeed * 0.12, 4)) - wUni.uWarp.value) * (1 - Math.exp(-dt * 5))
 
-    // game orb
-    if (game) gameTick(dt)
-    orbUni.uTime.value = time
 
     const idx = Math.round(j)
     if (idx !== shownShape) {
@@ -773,42 +748,12 @@ export async function createScene(canvas, opts = {}) {
     el.style.transform = `translate(${((_w.x + 1) / 2) * innerWidth}px, ${((1 - _w.y) / 2) * innerHeight}px)`
   }
 
-  // ---- Game: catch the signal
-  const _o = new Vector3()
-  function spawnOrb() {
-    const nx = (Math.random() * 2 - 1) * 0.7, ny = (Math.random() * 2 - 1) * 0.55
-    screenToWorld(nx, ny, _o)
-    orb.position.copy(_o)
-  }
-  function gameHit(cx, cy) {
-    _o.copy(orb.position).project(camera)
-    const sx = ((_o.x + 1) / 2) * innerWidth, sy = ((1 - _o.y) / 2) * innerHeight
-    if (Math.hypot(sx - cx, sy - cy) < (coarse ? 64 : 48)) {
-      game.score++
-      uniforms.uPulseO.value.copy(orb.position); uniforms.uPulseT.value = 0
-      spawnOrb()
-      game.cb({ score: game.score, left: game.left, hit: true })
-    }
-  }
-  function gameTick(dt) {
-    game.left -= dt
-    orbUni.uAlpha.value = Math.min(1, orbUni.uAlpha.value + dt * 4)
-    if (game.left <= 0) {
-      const g = game; game = null; orbUni.uAlpha.value = 0
-      g.cb({ score: g.score, left: 0, over: true })
-    } else if (Math.floor(game.left) !== game.shown) {
-      game.shown = Math.floor(game.left)
-      game.cb({ score: game.score, left: game.left })
-    }
-  }
-
   return {
     layout,
     playIntro() {
       if (reducedMQ.matches) { uniforms.uIntro.value = 0; return Promise.resolve() }
       return new Promise((done) => { intro = { t: 0, dur: 2.4, done }; setTimeout(() => { fpsArmed = true }, 3500) })
     },
-    sayHello() { egg = { t: egg.t, target: 1, hold: 3.2 } },
     setFocus(nodeIndex, related = []) {
       if (nodeIndex == null) { focusTarget = 0; return }
       focusTarget = 1
@@ -828,13 +773,6 @@ export async function createScene(canvas, opts = {}) {
     addSpin,
     setGyro(x, y) { gyro.on = true; gyro.x = MathUtils.clamp(x, -1, 1); gyro.y = MathUtils.clamp(y, -1, 1) },
     setVisitor,
-    startGame(cb) {
-      if (game) return
-      game = { score: 0, left: 20, shown: 20, cb }
-      orbUni.uAlpha.value = 0
-      spawnOrb()
-      cb({ score: 0, left: 20 })
-    },
     get tier() { return tier },
   }
 }

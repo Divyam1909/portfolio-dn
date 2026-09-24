@@ -95,7 +95,7 @@ export function neuralSphere(n) {
   ])
 }
 
-/* Text sampled from a canvas — used for the monogram and the hidden "hello" */
+/* Text sampled from a canvas */
 function textShape(n, seed, text, font, width) {
   const W = 900, H = 300
   const canvas = document.createElement('canvas')
@@ -128,9 +128,6 @@ function textShape(n, seed, text, font, width) {
 
 /* 1 — "DN" monogram */
 export const monogram = (n) => textShape(n, 21, 'DN', "italic 400 270px 'Instrument Serif', 'Times New Roman', serif", 3.6)
-
-/* 8 — hidden easter-egg shape */
-export const hello = (n) => textShape(n, 91, 'hello ✦', "italic 400 220px 'Instrument Serif', 'Times New Roman', serif", 3.4)
 
 /* 2 — Double helix (data pipelines) */
 export function helix(n) {
@@ -328,4 +325,4 @@ export function globe(n) {
   ])
 }
 
-export const SHAPES = [neuralSphere, monogram, helix, candles, leaf, book, lattice, globe, hello]
+export const SHAPES = [neuralSphere, monogram, helix, candles, leaf, book, lattice, globe]

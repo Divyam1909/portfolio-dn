@@ -1,5 +1,5 @@
 // Interface layer: custom cursor, magnetic elements, text scramble, toasts,
-// achievements, the ⌘K command palette and the recruiter quick view.
+// the ⌘K command palette and the recruiter quick view.
 
 const fine = matchMedia('(pointer: fine)').matches
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -17,37 +17,6 @@ export function toast(message, { accent = false, ms = 3200 } = {}) {
     setTimeout(() => el.remove(), 500)
   }, ms)
 }
-
-/* ---------- Achievements ---------- */
-const ACH = {
-  explorer: 'Explorer — reached the end of the journey',
-  disturber: 'Disturbance — sent 12 shockwaves',
-  hello: 'Signal found — discovered the hidden message',
-  catcher: 'Signal catcher — caught 10 in one round',
-  skim: 'Speed reader — opened the quick view',
-  listener: 'Listener — turned the sound on',
-  cartographer: 'Cartographer — explored 5 skills',
-}
-const store = {
-  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* private mode */ } },
-}
-const unlocked = new Set(store.get('dn-ach', []))
-let onUnlock = () => {}
-export const achievements = {
-  total: Object.keys(ACH).length,
-  get count() { return unlocked.size },
-  list() { return Object.entries(ACH).map(([id, text]) => ({ id, text, done: unlocked.has(id) })) },
-  unlock(id) {
-    if (!ACH[id] || unlocked.has(id)) return
-    unlocked.add(id)
-    store.set('dn-ach', [...unlocked])
-    toast(`<b>Achievement unlocked</b> ${ACH[id]} <span class="toast__meta">${unlocked.size}/${this.total}</span>`, { accent: true, ms: 4200 })
-    onUnlock(id)
-  },
-  onUnlock(fn) { onUnlock = fn },
-}
-export { store }
 
 /* ---------- Text scramble ---------- */
 const GLYPHS = '!<>-_\\/[]{}—=+*^?#01'
@@ -146,7 +115,6 @@ document.querySelectorAll('dialog').forEach((d) => {
 const quick = document.getElementById('quick')
 export function openQuick() {
   openDialog(quick)
-  achievements.unlock('skim')
 }
 export function initQuick() {
   document.querySelectorAll('[data-open-quick]').forEach((b) => b.addEventListener('click', openQuick))
@@ -157,7 +125,6 @@ export function initQuick() {
 const palette = document.getElementById('palette')
 const input = palette.querySelector('[data-palette-input]')
 const list = palette.querySelector('[data-palette-list]')
-const achCount = palette.querySelector('[data-achievements-count]')
 let commands = []
 let filtered = []
 let active = 0
@@ -191,7 +158,6 @@ function openPalette() {
 function render() {
   const q = input.value.trim().toLowerCase()
   filtered = commands.filter((c) => {
-    if (c.secret) return q.length >= 4 && c.secret.some((s) => s.startsWith(q))
     return !q || (c.label + ' ' + (c.keywords || '') + ' ' + c.group).toLowerCase().includes(q)
   })
   active = 0
@@ -199,8 +165,7 @@ function render() {
   list.innerHTML = filtered.map((c, i) => {
     const head = c.group !== group ? `<li class="palette__group" role="presentation">${(group = c.group)}</li>` : ''
     return `${head}<li id="cmd-${i}" role="option" data-i="${i}" class="palette__item"><span>${c.label}</span>${c.hint ? `<kbd>${c.hint}</kbd>` : ''}</li>`
-  }).join('') || '<li class="palette__empty">No matches — try “resume”, “email” or “play”.</li>'
-  achCount.textContent = `${achievements.count} / ${achievements.total} achievements`
+  }).join('') || '<li class="palette__empty">No matches — try “resume”, “email” or “sound”.</li>'
   highlight()
 }
 function move(d) {

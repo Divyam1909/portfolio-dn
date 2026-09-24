@@ -108,10 +108,5 @@ export function createAudio() {
       const i = Math.max(0, Math.min(SCALE.length - 1, Math.round(((nx + 1) / 2) * (SCALE.length - 1))))
       note(220 * Math.pow(2, SCALE[i] / 12), ctx.currentTime)
     },
-    chime() {
-      if (!on) return
-      const t = ctx.currentTime
-      ;[0, 4, 7, 12].forEach((s, k) => note(440 * Math.pow(2, s / 12), t + k * 0.09, 0.14, 1.8))
-    },
   }
 }

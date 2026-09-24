@@ -3,8 +3,8 @@ import Lenis from 'lenis'
 import { createAudio } from './audio.js'
 import { guessVisitor } from './visitor.js'
 import {
-  toast, achievements, store, scramble, initScramble, initMagnetic, initCursor,
-  initQuick, openQuick, initPalette, isTyping,
+  toast, scramble, initScramble, initMagnetic, initCursor,
+  initQuick, openQuick, initPalette,
 } from './ui.js'
 
 const root = document.documentElement
@@ -138,7 +138,6 @@ initMagnetic()
 initScramble()
 initQuick()
 const audio = createAudio()
-achievements.onUnlock(() => audio.chime())
 
 // sound toggle
 const soundBtn = $('[data-sound]')
@@ -147,7 +146,6 @@ async function toggleSound() {
   soundBtn.setAttribute('aria-pressed', String(on))
   soundBtn.classList.toggle('is-on', on)
   $('[data-sound-state]').textContent = on ? 'on' : 'off'
-  if (on) achievements.unlock('listener')
 }
 soundBtn.addEventListener('click', toggleSound)
 
@@ -208,8 +206,6 @@ async function typeHello() {
 }
 
 let api = null
-let pulses = 0
-let explored = false
 
 async function boot() {
   if (hasWebGL()) {
@@ -219,14 +215,8 @@ async function boot() {
         onShapeChange,
         onProgress: (p) => (target = 0.15 + p * 0.85),
         labels: { home: $('[data-label-home]'), visitor: $('[data-label-visitor]'), skill: $('[data-label-skill]') },
-        onPulse: (nx) => {
-          audio.pluck(nx)
-          if (++pulses === 12) achievements.unlock('disturber')
-        },
-        onFrame: (s) => {
-          audio.update(s)
-          if (!explored && s.morph > 6.95) { explored = true; achievements.unlock('explorer') }
-        },
+        onPulse: (nx) => audio.pluck(nx),
+        onFrame: (s) => audio.update(s),
       })
       api.setVisitor(visitor)
       hud.classList.add('is-visible')
@@ -260,7 +250,6 @@ function initInteractions() {
   // Skill constellation
   const skills = $$('[data-skill]')
   const nodeFor = (i) => (i * 29 + 7) % 64
-  const seen = new Set()
   const skillName = $('[data-skill-name]')
   skills.forEach((btn, i) => {
     btn.dataset.node = nodeFor(i)
@@ -272,8 +261,6 @@ function initInteractions() {
     const group = [...btn.closest('.skill-group').querySelectorAll('[data-skill]')].map((b) => +b.dataset.node)
     api?.setFocus(+btn.dataset.node, group)
     skillName.textContent = btn.textContent
-    seen.add(btn.textContent)
-    if (seen.size === 5) achievements.unlock('cartographer')
   }
   skills.forEach((btn) => {
     btn.addEventListener('pointerenter', (e) => e.pointerType === 'mouse' && focus(btn))
@@ -308,46 +295,6 @@ function initInteractions() {
   }
 }
 
-/* ---------- Easter eggs ---------- */
-function sayHello() {
-  if (!api) { toast('✦ hello to you too'); return }
-  api.sayHello()
-  toast('✦ <b>hello</b> to you too')
-  achievements.unlock('hello')
-}
-const KONAMI = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a']
-let keys = []
-addEventListener('keydown', (e) => {
-  if (isTyping(e.target) || e.metaKey || e.ctrlKey) return
-  keys = [...keys, e.key.toLowerCase()].slice(-10)
-  if (KONAMI.every((k, i) => keys[i] === k)) { keys = []; sayHello() }
-  else if (keys.slice(-5).join('') === 'hello') { keys = []; sayHello() }
-})
-
-/* ---------- Mini-game: catch the signal ---------- */
-const gameBox = $('.game')
-function startGame() {
-  if (!api) { toast('The game needs WebGL — try another browser.'); return }
-  gameBox.hidden = false
-  api.startGame(({ score, left, over }) => {
-    $('[data-game-score]').textContent = score
-    $('[data-game-time]').textContent = Math.ceil(left)
-    if (over) {
-      gameBox.hidden = true
-      const best = Math.max(score, store.get('dn-best', 0))
-      store.set('dn-best', best)
-      toast(`Round over — you caught <b>${score}</b> signal${score === 1 ? '' : 's'}. Best: ${best}`, { ms: 4200 })
-      if (score >= 10) achievements.unlock('catcher')
-    }
-  })
-  toast(coarse ? 'Tap the glowing signal as many times as you can in 20s' : 'Click the glowing signal as many times as you can in 20s')
-}
-
-function showAchievements() {
-  const items = achievements.list().map((a) => `<li class="${a.done ? 'done' : ''}">${a.done ? '✦' : '○'} ${a.done ? a.text : a.text.split(' — ')[0] + ' — ???'}</li>`).join('')
-  toast(`<b>Achievements ${achievements.count}/${achievements.total}</b><ul class="toast__list">${items}</ul>`, { ms: 7000 })
-}
-
 /* ---------- Command palette ---------- */
 initPalette([
   { group: 'Navigate', label: 'Prologue — top', run: () => goTo('#top'), keywords: 'home hero start' },
@@ -365,10 +312,7 @@ initPalette([
   { group: 'For recruiters', label: 'Send an email', run: () => (location.href = `mailto:${EMAIL}`), keywords: 'contact mail' },
   { group: 'For recruiters', label: 'LinkedIn', run: () => window.open('https://www.linkedin.com/in/divyam-navin', '_blank', 'noopener'), keywords: 'social' },
   { group: 'For recruiters', label: 'GitHub', run: () => window.open('https://github.com/Divyam1909', '_blank', 'noopener'), keywords: 'code social' },
-  { group: 'Play', get label() { return audio.on ? 'Turn sound off' : 'Turn sound on' }, run: toggleSound, keywords: 'audio music' },
-  { group: 'Play', label: 'Catch the signal — 20-second game', run: startGame, keywords: 'game play fun' },
-  { group: 'Play', label: 'Show achievements', run: showAchievements, keywords: 'trophies secrets' },
-  { group: 'Secret', label: 'Say hello ✦', secret: ['hello', 'secret', 'hi there'], run: sayHello },
+  { group: 'Settings', get label() { return audio.on ? 'Turn sound off' : 'Turn sound on' }, run: toggleSound, keywords: 'audio music' },
 ])
 
 boot()
