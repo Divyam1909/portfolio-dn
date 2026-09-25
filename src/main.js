@@ -3,7 +3,7 @@ import Lenis from 'lenis'
 import { createAudio } from './audio.js'
 import { guessVisitor } from './visitor.js'
 import {
-  toast, scramble, initScramble, initMagnetic, initCursor,
+  toast, initScramble, initMagnetic, initCursor,
   initQuick, openQuick, initPalette,
 } from './ui.js'
 
@@ -48,7 +48,7 @@ $$('[data-split]').forEach(splitWords)
 
 /* ---------- Smooth scroll ---------- */
 let lenis = null
-if (!reduced) {
+if (!reduced && !/[?&]debug\b/.test(location.search)) {
   lenis = new Lenis({ autoRaf: true, lerp: 0.1, anchors: { offset: -20 }, prevent: (node) => !!node.closest?.('dialog') })
 }
 function goTo(sel) {
@@ -119,9 +119,9 @@ function startReveals() {
   $$('[data-reveal], [data-split]').forEach((el) => io.observe(el))
 }
 
-/* ---------- HUD ---------- */
+/* ---------- Section sidebar ---------- */
 const hud = $('.hud')
-const pad = (n) => String(n).padStart(2, '0')
+hud.querySelectorAll('a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); goTo(a.getAttribute('href')) }))
 // light leaks move to a new composition and flare on every chapter change
 const leaks = $('.leaks')
 const LEAK_POSES = [
@@ -143,15 +143,14 @@ function moveLeaks(i) {
   leakTimer = setTimeout(() => leaks.classList.remove('is-flash'), 700)
 }
 
-function onShapeChange(i, total, label, chapter) {
+function onShapeChange(i, total, label, section) {
   moveLeaks(i)
-  $('[data-hud-index]').textContent = pad(i + 1)
-  $('[data-hud-total]').textContent = pad(total)
-  const ch = $('[data-hud-chapter]')
-  const lb = $('[data-hud-label]')
-  ch.dataset.text = ch.textContent = chapter
-  lb.dataset.text = lb.textContent = label
-  scramble(lb)
+  hud.querySelectorAll('a').forEach((a) => {
+    const on = a.dataset.section === section
+    a.classList.toggle('is-active', on)
+    if (on) a.setAttribute('aria-current', 'true')
+    else a.removeAttribute('aria-current')
+  })
 }
 
 /* ---------- Interface ---------- */
@@ -236,11 +235,12 @@ async function boot() {
       api = await createScene($('.webgl'), {
         onShapeChange,
         onProgress: (p) => (target = 0.15 + p * 0.85),
-        labels: { home: $('[data-label-home]'), visitor: $('[data-label-visitor]'), skill: $('[data-label-skill]') },
+        labels: { home: $('[data-label-home]'), visitor: $('[data-label-visitor]'), skill: $('[data-label-skill]'), beads: $$('[data-label-bead]') },
         onPulse: (nx) => audio.pluck(nx),
         onFrame: (s) => audio.update(s),
       })
       api.setVisitor(visitor)
+      if (/[?&]debug\b/.test(location.search)) window.__scene = api
       hud.classList.add('is-visible')
     } catch (err) {
       console.warn('3D scene disabled:', err)
@@ -277,31 +277,67 @@ function initInteractions() {
     btn.dataset.node = nodeFor(i)
     btn.dataset.cursor = 'Locate'
   })
+  const groups = $$('.skill-group')
+  let leaveTimer = 0
   const focus = (btn) => {
-    skills.forEach((b) => b.classList.toggle('is-focus', b === btn))
+    clearTimeout(leaveTimer)
+    skills.forEach((b) => {
+      b.classList.toggle('is-focus', b === btn)
+      b.setAttribute('aria-pressed', String(b === btn))
+    })
     if (!btn) { api?.setFocus(null); return }
-    const group = [...btn.closest('.skill-group').querySelectorAll('[data-skill]')].map((b) => +b.dataset.node)
-    api?.setFocus(+btn.dataset.node, group)
+    const groupEl = btn.closest('.skill-group')
+    const related = [...groupEl.querySelectorAll('[data-skill]')].map((b) => +b.dataset.node)
+    api?.setFocus(+btn.dataset.node, related, groups.indexOf(groupEl))
     skillName.textContent = btn.textContent
   }
+  // hover shows a skill; leaving keeps it for a moment so the camera move doesn't flicker
+  const release = () => { clearTimeout(leaveTimer); leaveTimer = setTimeout(() => focus(null), 1200) }
   skills.forEach((btn) => {
+    btn.setAttribute('aria-pressed', 'false')
     btn.addEventListener('pointerenter', (e) => e.pointerType === 'mouse' && focus(btn))
-    btn.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && focus(null))
+    btn.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && release())
     btn.addEventListener('focus', () => focus(btn))
-    btn.addEventListener('blur', () => focus(null))
-    btn.addEventListener('click', () => focus(btn))
+    btn.addEventListener('blur', () => { if (!coarse) release() })
+    // a tap focuses the button before its click fires, so remember the state from pointerdown
+    let wasOn = false
+    btn.addEventListener('pointerdown', () => { wasOn = btn.classList.contains('is-focus') })
+    btn.addEventListener('click', (e) => {
+      // tap an active skill again to clear it (touch); mouse clicks just (re)select
+      if (e.pointerType && e.pointerType !== 'mouse' && wasOn) { wasOn = false; btn.blur(); focus(null); return }
+      focus(btn)
+    })
   })
 
-  // Drag to spin the lattice / globe
-  let dragging = false, lx = 0
+  // Drag to rotate the lattice / globe — follows the pointer, coasts on release
+  let dragging = false, lx = 0, ly = 0
   $$('.drag-zone').forEach((zone) => zone.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('a, button, input')) return
-    dragging = true; lx = e.clientX
+    if (e.button > 0 || e.target.closest('a, button, input')) return
+    dragging = true; lx = e.clientX; ly = e.clientY
+    api?.dragStart()
+    root.classList.add('is-dragging')
   }))
-  addEventListener('pointermove', (e) => { if (!dragging) return; api?.addSpin(e.clientX - lx); lx = e.clientX }, { passive: true })
-  const stop = () => (dragging = false)
+  addEventListener('pointermove', (e) => {
+    if (!dragging) return
+    // on touch only horizontal swipes rotate, vertical ones keep scrolling the page
+    api?.drag(e.clientX - lx, e.pointerType === 'touch' ? 0 : e.clientY - ly)
+    lx = e.clientX; ly = e.clientY
+  }, { passive: true })
+  const stop = () => {
+    if (!dragging) return
+    dragging = false
+    api?.dragEnd()
+    root.classList.remove('is-dragging')
+  }
   addEventListener('pointerup', stop)
   addEventListener('pointercancel', stop)
+
+  // Internships: the bead for the role you're reading lights up in the helix
+  const roles = $$('.role')
+  const roleIO = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) api?.setActiveRole(roles.indexOf(e.target)) })
+  }, { rootMargin: '-40% 0px -45% 0px' })
+  roles.forEach((r) => roleIO.observe(r))
 
   // Gyroscope tilt on phones (iOS asks permission on the first tap)
   if (coarse && api) {
@@ -326,6 +362,7 @@ initPalette([
   { group: 'Navigate', label: 'Project: stock market prediction', run: () => goTo('[data-shape="3"]'), keywords: 'ml finance' },
   { group: 'Navigate', label: 'Project: image-to-biomass', run: () => goTo('[data-shape="4"]'), keywords: 'cnn csiro vision' },
   { group: 'Navigate', label: 'Project: EduSage', run: () => goTo('[data-shape="5"]'), keywords: 'education llm gemini' },
+  { group: 'Navigate', label: 'Previous portfolio — v1 “Universe”', run: () => goTo('.evolution'), keywords: 'old v1 universe solar system history' },
   { group: 'Navigate', label: 'Chapter 04 · Toolkit — skills', run: () => goTo('#skills'), keywords: 'tech stack' },
   { group: 'Navigate', label: 'Epilogue — contact', run: () => goTo('#contact'), keywords: 'hire email' },
   { group: 'For recruiters', label: 'Quick view — the 30-second version', run: openQuick, keywords: 'hr summary recruiter tldr' },

@@ -1,6 +1,7 @@
 // Point-cloud generators. Each returns { pos, order } where `pos` holds exactly `n`
 // xyz points (roughly within a radius of ~2.2 units) and `order` holds 4 floats per
-// point used by the "living" scenes (candle time, leaf growth, page flip u/v).
+// point used by the "living" scenes (candle time, leaf growth, page flip u/v), plus
+// 4 more (order2) for the helix beads/packets and the skill-orbit rings.
 // Points are shuffled so any prefix of the buffer is an even sample of the whole
 // shape — that lets the renderer draw fewer particles on slower devices.
 
@@ -34,7 +35,7 @@ function randomOnSphere(r) {
 function compose(n, seed, parts) {
   const r = rng(seed)
   const pos = new Float32Array(n * 3)
-  const order = new Float32Array(n * 4).fill(-1)
+  const order = new Float32Array(n * 8).fill(-1)
   const total = parts.reduce((a, p) => a + p[0], 0)
   let i = 0
   parts.forEach(([w, fn], k) => {
@@ -42,14 +43,14 @@ function compose(n, seed, parts) {
     for (let c = 0; c < count && i < n; c++, i++) {
       const p = fn(c, count, r)
       pos.set(p.slice(0, 3), i * 3)
-      if (p.length > 3) order.set(p.slice(3), i * 4)
+      if (p.length > 3) order.set(p.slice(3), i * 8)
     }
   })
   // Fisher–Yates shuffle, keeping pos/order pairs together
   for (let a = n - 1; a > 0; a--) {
     const b = Math.floor(r() * (a + 1))
     for (let k = 0; k < 3; k++) { const t = pos[a * 3 + k]; pos[a * 3 + k] = pos[b * 3 + k]; pos[b * 3 + k] = t }
-    for (let k = 0; k < 4; k++) { const t = order[a * 4 + k]; order[a * 4 + k] = order[b * 4 + k]; order[b * 4 + k] = t }
+    for (let k = 0; k < 8; k++) { const t = order[a * 8 + k]; order[a * 8 + k] = order[b * 8 + k]; order[b * 8 + k] = t }
   }
   return { pos, order }
 }
@@ -129,24 +130,43 @@ function textShape(n, seed, text, font, width) {
 /* 1 — "DN" monogram */
 export const monogram = (n) => textShape(n, 21, 'DN', "italic 400 270px 'Instrument Serif', 'Times New Roman', serif", 3.6)
 
-/* 2 — Double helix (data pipelines) */
+/* 2 — Double helix (data pipelines) with one glowing bead per internship and data
+   packets that stream along the strands. order2: x = strand * 2 + packet t, y = bead index. */
+export const HELIX = { L: 1.6, R: 0.52, TURNS: 2.2, ROT: [0.35, 0.25, -0.18], BEADS: [0.8, 0.5, 0.2] }
+export const helixPoint = (p) => rotate(p, ...HELIX.ROT)
+export const HELIX_BEADS = HELIX.BEADS.map((t) => helixPoint([t * 2 * HELIX.L - HELIX.L, 0, 0]))
 export function helix(n) {
-  const L = 1.6, R = 0.52, turns = 2.2
-  const at = (t, phase) => {
-    const a = t * turns * TAU + phase
-    return [t * 2 * L - L, Math.cos(a) * R, Math.sin(a) * R]
+  const { L, R, TURNS } = HELIX
+  const at = (t, phase, rad = R) => {
+    const a = t * TURNS * TAU + phase
+    return [t * 2 * L - L, Math.cos(a) * rad, Math.sin(a) * rad]
   }
-  const tilt = (p) => rotate(p, 0.35, 0.25, -0.18)
+  const tilt = helixPoint
+  const NONE = [-1, -1, -1, -1]
   return compose(n, 31, [
-    [38, (i, c, r) => { const p = at(r(), 0); return tilt([p[0], p[1] + gauss(r) * 0.035, p[2] + gauss(r) * 0.035]) }],
-    [38, (i, c, r) => { const p = at(r(), Math.PI); return tilt([p[0], p[1] + gauss(r) * 0.035, p[2] + gauss(r) * 0.035]) }],
-    [18, (i, c, r) => {
+    [30, (i, c, r) => { const p = at(r(), 0); return tilt([p[0], p[1] + gauss(r) * 0.035, p[2] + gauss(r) * 0.035]) }],
+    [30, (i, c, r) => { const p = at(r(), Math.PI); return tilt([p[0], p[1] + gauss(r) * 0.035, p[2] + gauss(r) * 0.035]) }],
+    [14, (i, c, r) => {
       const rung = Math.floor(r() * 34)
       const t = (rung + 0.5) / 34
       const a = at(t, 0), b = at(t, Math.PI), s = r()
       return tilt([a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s])
     }],
-    [6, (i, c, r) => tilt([(r() * 2 - 1) * L * 1.1, gauss(r) * 0.9, gauss(r) * 0.9])],
+    [10, (i, c, r) => {
+      // data packets: short dashes that travel along the outside of each strand
+      const strand = r() < 0.5 ? 0 : 1
+      const t = (Math.floor(r() * 9) / 9 + r() * 0.035) % 1
+      return [...tilt(at(t, strand * Math.PI, R * 1.22)), ...NONE, t + strand * 2, -1, -1, -1]
+    }],
+    [12, (i, c, r) => {
+      // one bead per internship: a dense core wrapped in a thin orbit shell
+      const b = i % 3
+      const c0 = HELIX_BEADS[b]
+      const shell = r() < 0.35
+      const d = shell ? randomOnSphere(r).map((v) => v * 0.26) : [gauss(r) * 0.07, gauss(r) * 0.07, gauss(r) * 0.07]
+      return [c0[0] + d[0], c0[1] + d[1], c0[2] + d[2], ...NONE, -1, b, -1, -1]
+    }],
+    [4, (i, c, r) => tilt([(r() * 2 - 1) * L * 1.1, gauss(r) * 0.9, gauss(r) * 0.9])],
   ])
 }
 
@@ -259,10 +279,12 @@ export const LATTICE_NODES = []
 for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) for (let k = 0; k < G; k++) {
   LATTICE_NODES.push([(i / (G - 1) - 0.5) * GS, (j / (G - 1) - 0.5) * GS, (k / (G - 1) - 0.5) * GS])
 }
+// order2: z = skill-group ring (0 Languages, 1 Web, 2 AI/ML, 3 Data & tools), w = angle 0..1
+export const RING_TILTS = [[1.2, 0, 0.3], [0.4, 0.9, -0.2], [-0.9, 0.3, 0.6], [0.1, -0.7, 1.1]]
 export function lattice(n) {
   const node = (i, j, k) => LATTICE_NODES[i * G * G + j * G + k]
   return compose(n, 71, [
-    [80, (c, count, r) => {
+    [64, (c, count, r) => {
       const axis = Math.floor(r() * 3)
       const a = Math.floor(r() * G), b = Math.floor(r() * G), s = Math.floor(r() * (G - 1))
       const f = r()
@@ -270,9 +292,15 @@ export function lattice(n) {
       const p0 = node(...ids[0]), p1 = node(...ids[1])
       return [0, 1, 2].map((q) => p0[q] + (p1[q] - p0[q]) * f + gauss(r) * 0.006)
     }],
-    [20, (c, count, r) => {
+    [16, (c, count, r) => {
       const p = node(Math.floor(r() * G), Math.floor(r() * G), Math.floor(r() * G))
       return [p[0] + gauss(r) * 0.045, p[1] + gauss(r) * 0.045, p[2] + gauss(r) * 0.045]
+    }],
+    [20, (i, c, r) => {
+      // four orbit rings — one per skill group — animated in the shader
+      const g = i % 4, w = r()
+      const a = w * TAU, rad = 1.75 + g * 0.12
+      return [...rotate([Math.cos(a) * rad, 0, Math.sin(a) * rad], ...RING_TILTS[g]), -1, -1, -1, -1, -1, -1, g, w]
     }],
   ])
 }

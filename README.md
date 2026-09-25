@@ -6,14 +6,16 @@ A single-page portfolio told as an interactive journey. One Three.js particle sy
 | --- | --- | --- |
 | Prologue | Neural sphere | Big-bang intro: particles collapse out of chaos |
 | Ch.01 Origin | "DN" monogram | |
-| Ch.02 Craft | Double helix | |
-| Ch.03 Experiments | Candlesticks → leaf → book | Scene progresses as you read: candles draw in, the leaf grows, the pages turn |
-| Ch.04 Toolkit | Skill lattice | Hover or tap a skill to light it up and link it to related skills; drag to spin |
+| Internships | Double helix | One glowing bead per internship lights up as you read it; data packets stream along the strands |
+| Projects | Candlesticks → leaf → book | Scene progresses as you read: candles draw in, the leaf grows, the pages turn |
+| Skills | Skill lattice + 4 orbit rings | Hover, click or tap a skill: the lattice turns to face it, the skill and its group-mates light up with flowing beams, and that group's orbit ring speeds up. Drag to rotate (follows the pointer, coasts on release) |
 | Epilogue | Globe (real continents) | Pin on Thane, arcs to tech hubs, your approximate location from your time zone; drag to spin |
 
 **Everywhere:** the cursor pushes particles aside, a click or tap sends a shockwave, and phones respond to tilt (gyroscope).
 
 **Extras**
+- **Previous portfolio:** v1 “Universe” is shown at the end of Projects as a milestone card linking to the old site.
+- **Section sidebar** (desktop): Intro, About, Internships, Projects, Skills, Contact; highlights the current section and jumps on click.
 - **Quick view:** a 30-second recruiter summary in a dialog.
 - **⌘K / Ctrl K** (or `/`): command palette to jump to sections, copy your email, open the résumé, or toggle sound.
 - **Generative sound**, off by default: a drone that responds to scroll, wind during flights, and plucks on clicks.

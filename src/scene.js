@@ -8,7 +8,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { SHAPES, rng, LEAF_BASE, BOOK, LATTICE_NODES, latLon, arcPoint, HOME, GLOBE_R } from './shapes.js'
+import { SHAPES, rng, LEAF_BASE, BOOK, LATTICE_NODES, latLon, arcPoint, HOME, GLOBE_R, HELIX, HELIX_BEADS, RING_TILTS } from './shapes.js'
 
 const PI = Math.PI
 const DEG = PI / 180
@@ -59,11 +59,14 @@ attribute vec3 aS0; attribute vec3 aS1; attribute vec3 aS2; attribute vec3 aS3; 
 attribute vec3 aS5; attribute vec3 aS6; attribute vec3 aS7;
 attribute vec4 aRnd;
 attribute vec4 aOrder;
+attribute vec4 aOrder2;
 
 uniform float uTime, uMorph, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uPulseT, uMouseF, uScale;
-uniform float uIntro, uLive3, uLive4, uLive5, uFocusAmt, uMouseR, uGain;
+uniform float uIntro, uLive3, uLive4, uLive5, uFocusAmt, uMouseR, uGain, uActiveRole, uFocusGroup, uRelN;
+uniform vec3 uRel[8];
 uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase;
 uniform vec3 uSt[8];
+uniform vec3 uBead[3];
 uniform vec2 uTilt;
 
 varying vec3 vColor;
@@ -87,9 +90,48 @@ vec3 turnedPage(float u, float v, float a){
   return rotZ(rotY(rotX(p, ${BOOK.ROT[0].toFixed(3)}), ${BOOK.ROT[1].toFixed(3)}), ${BOOK.ROT[2].toFixed(3)});
 }
 
-// Per-shape behaviour: spinning, and the "living" project scenes driven by scroll.
-vec3 living(int i, vec3 p, inout float alpha){
-  if(i==0 || i==6) return rotY(p, uSpin);
+vec3 helixTilt(vec3 p){ return rotZ(rotY(rotX(p, ${HELIX.ROT[0].toFixed(3)}), ${HELIX.ROT[1].toFixed(3)}), ${HELIX.ROT[2].toFixed(3)}); }
+vec3 ringTilt(vec3 p, int g){
+  ${RING_TILTS.map((r, g) => `if(g==${g}) return rotZ(rotY(rotX(p, ${r[0].toFixed(2)}), ${r[1].toFixed(2)}), ${r[2].toFixed(2)});`).join('\n  ')}
+  return p;
+}
+
+// Per-shape behaviour: spinning, the internship beads, skill rings and the "living" project scenes.
+vec3 living(int i, vec3 p, inout float alpha, inout float glow){
+  if(i==0) return rotY(p, uSpin);
+  if(i==2){
+    if(aOrder2.x >= 0.){
+      // data packets flowing along the strands
+      float strand = floor(aOrder2.x * 0.5);
+      float t = fract(aOrder2.x - strand * 2. + uTime * 0.045);
+      float a = t * ${HELIX.TURNS.toFixed(2)} * 6.2831853 + strand * PI;
+      p = helixTilt(vec3(t * ${(2 * HELIX.L).toFixed(3)} - ${HELIX.L.toFixed(3)}, cos(a) * ${(HELIX.R * 1.22).toFixed(3)}, sin(a) * ${(HELIX.R * 1.22).toFixed(3)}));
+      glow += 0.35;
+    }
+    if(aOrder2.y >= 0.){
+      // internship beads: the one you're reading about swells and glows
+      vec3 c = uBead[int(aOrder2.y + 0.5)];
+      float on = 1. - step(0.5, abs(aOrder2.y - uActiveRole));
+      float pulse = 0.5 + 0.5 * sin(uTime * 3.2);
+      p = c + (p - c) * (1. + on * (0.45 + 0.2 * pulse));
+      glow += on * (0.8 + 0.4 * pulse);
+      alpha *= 0.55 + on * 0.6;
+    }
+    return p;
+  }
+  if(i==6){
+    if(aOrder2.z >= 0.){
+      // one orbit ring per skill group; the focused group's ring speeds up and lights
+      int g = int(aOrder2.z + 0.5);
+      float on = 1. - step(0.5, abs(aOrder2.z - uFocusGroup));
+      float a = aOrder2.w * 6.2831853 + uTime * (0.22 + aOrder2.z * 0.06 + on * 0.9) * (mod(aOrder2.z, 2.) < 0.5 ? 1. : -1.);
+      float rad = 1.75 + aOrder2.z * 0.12;
+      p = ringTilt(vec3(cos(a) * rad, (aRnd.x - 0.5) * 0.03, sin(a) * rad), g);
+      glow += on * uFocusAmt * 1.2;
+      alpha *= 0.7 + on * uFocusAmt * 0.8;
+    }
+    return rotY(p, uSpin);
+  }
   if(i==7) return rotX(rotY(p, uSpinG), ${GLOBE_TILT.toFixed(4)});
   if(i==3){
     // candles draw in left → right; the future is still noise
@@ -122,16 +164,22 @@ void main(){
   float st = aRnd.y * 0.45;
   float fl = smoothstep(st, st + 0.55, f);
 
-  float alA = 1., alB = 1.;
-  vec3 a = living(i0, shapeAt(i0), alA);
-  vec3 b = living(i1, shapeAt(i1), alB);
+  float alA = 1., alB = 1., glA = 0., glB = 0.;
+  vec3 a = living(i0, shapeAt(i0), alA, glA);
+  vec3 b = living(i1, shapeAt(i1), alB, glB);
   vec3 p = mix(a, b, fl);
   float alpha = mix(alA, alB, fl);
+  float glow = mix(glA, glB, fl);
   float tr = sin(fl * PI);
 
   // skills constellation: light up particles around the focused node
   float w6 = (i0 == 6 ? 1. - fl : 0.) + (i1 == 6 ? fl : 0.);
-  float focus = w6 * uFocusAmt * smoothstep(0.42, 0.0, distance(aS6, uFocus));
+  float near = smoothstep(0.42, 0.0, distance(aS6, uFocus));
+  for (int k = 0; k < 8; k++) {
+    if (float(k) >= uRelN) break;
+    near = max(near, 0.55 * smoothstep(0.3, 0.0, distance(aS6, uRel[k])));
+  }
+  float focus = w6 * uFocusAmt * near;
 
   // mid-flight: particles swirl and scatter, then settle into the next shape
   p = rotY(p, tr * (aRnd.x - 0.5) * 1.6);
@@ -167,13 +215,13 @@ void main(){
   vec4 mv = viewMatrix * wp;
   gl_Position = projectionMatrix * mv;
   float depth = -mv.z;
-  float size = uSize * (0.45 + aRnd.z) * uPR / max(depth, 0.1) * (1. + ring * 1.5 + focus * 1.4);
+  float size = uSize * (0.45 + aRnd.z) * uPR / max(depth, 0.1) * (1. + ring * 1.5 + focus * 1.4 + glow * 0.7);
   gl_PointSize = min(size, 48. * uPR);
 
   vec3 col = aRnd.w > 0.84 ? uColB : (aRnd.w > 0.78 ? uColC : uColA);
-  vColor = mix(col, uColB, clamp(force * 1.2 + ring + focus, 0., 1.));
+  vColor = mix(col, uColB, clamp(force * 1.2 + ring + focus + glow, 0., 1.));
   float dimOthers = 1. - uFocusAmt * w6 * 0.45 * (1. - focus);
-  vAlpha = uGain * uDim * alpha * dimOthers * (0.35 + 0.55 * aRnd.z) * (1. + force * 0.8 + focus)
+  vAlpha = uGain * uDim * alpha * dimOthers * (0.35 + 0.55 * aRnd.z) * (1. + force * 0.8 + focus + glow * 0.6)
          * smoothstep(0.3, 2.2, depth);
 }`
 
@@ -319,12 +367,17 @@ export async function createScene(canvas, opts = {}) {
 
   const geo = new BufferGeometry()
   const order = new Float32Array(MAX * 4).fill(-1)
+  const order2 = new Float32Array(MAX * 4).fill(-1)
   for (let i = 0; i < SHAPES.length; i++) {
     const s = SHAPES[i](MAX)
     geo.setAttribute(`aS${i}`, new BufferAttribute(s.pos, 3))
-    if (i === 3) for (let k = 0; k < MAX; k++) order[k * 4] = s.order[k * 4]
-    if (i === 4) for (let k = 0; k < MAX; k++) order[k * 4 + 1] = s.order[k * 4 + 1]
-    if (i === 5) for (let k = 0; k < MAX; k++) { order[k * 4 + 2] = s.order[k * 4 + 2]; order[k * 4 + 3] = s.order[k * 4 + 3] }
+    // each shape owns different channels of the shared per-particle data
+    const o = s.order
+    if (i === 3) for (let k = 0; k < MAX; k++) order[k * 4] = o[k * 8]
+    if (i === 4) for (let k = 0; k < MAX; k++) order[k * 4 + 1] = o[k * 8 + 1]
+    if (i === 5) for (let k = 0; k < MAX; k++) { order[k * 4 + 2] = o[k * 8 + 2]; order[k * 4 + 3] = o[k * 8 + 3] }
+    if (i === 2) for (let k = 0; k < MAX; k++) { order2[k * 4] = o[k * 8 + 4]; order2[k * 4 + 1] = o[k * 8 + 5] }
+    if (i === 6) for (let k = 0; k < MAX; k++) { order2[k * 4 + 2] = o[k * 8 + 6]; order2[k * 4 + 3] = o[k * 8 + 7] }
     onProgress?.((i + 1) / SHAPES.length)
     await new Promise((r) => setTimeout(r, 0))
   }
@@ -333,6 +386,7 @@ export async function createScene(canvas, opts = {}) {
   for (let i = 0; i < rnd.length; i++) rnd[i] = r()
   geo.setAttribute('aRnd', new BufferAttribute(rnd, 4))
   geo.setAttribute('aOrder', new BufferAttribute(order, 4))
+  geo.setAttribute('aOrder2', new BufferAttribute(order2, 4))
   geo.setAttribute('position', geo.getAttribute('aS0'))
 
   // Stations: each chapter lives at its own point in space; the camera flies between them.
@@ -348,7 +402,9 @@ export async function createScene(canvas, opts = {}) {
     uMouse: { value: new Vector3(99, 99, 0) }, uMouseF: { value: 0 }, uMouseR: { value: 0.9 },
     uIntro: { value: reducedMQ.matches ? 0 : 1 },
     uLive3: { value: 1 }, uLive4: { value: 1 }, uLive5: { value: 0 },
-    uFocus: { value: new Vector3() }, uFocusAmt: { value: 0 },
+    uFocus: { value: new Vector3() }, uFocusAmt: { value: 0 }, uFocusGroup: { value: -1 },
+    uRel: { value: Array.from({ length: 8 }, () => new Vector3()) }, uRelN: { value: 0 },
+    uActiveRole: { value: 0 }, uBead: { value: HELIX_BEADS.map((b) => new Vector3(...b)) },
     uLeafBase: { value: new Vector3(...LEAF_BASE) },
     uSt: { value: stations },
     uTilt: { value: new Vector2() },
@@ -425,6 +481,8 @@ export async function createScene(canvas, opts = {}) {
   // ---- Rigs: objects that ride along with a shape (same station, scale, tilt and spin)
   const makeRig = (i) => { const outer = new Group(); const inner = new Group(); outer.add(inner); scene.add(outer); return { i, outer, inner } }
   const latticeRig = makeRig(6)
+  const helixRig = makeRig(2)
+  const beadLocal = HELIX_BEADS.map((b) => new Vector3(...b).add(new Vector3(0, 0.34, 0)))
   const globeRig = makeRig(7)
 
   // Skill constellation lines
@@ -435,6 +493,28 @@ export async function createScene(canvas, opts = {}) {
   const cMat = new LineBasicMaterial({ color: raw(ACCENT), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false })
   latticeRig.inner.add(new LineSegments(cGeo, cMat))
   let focusTarget = 0
+  const stopsShape6Near = () => Math.abs(uniforms.uMorph.value - 6) < 0.6
+
+  const BEAM = 26
+  const beamGeo = new BufferGeometry()
+  beamGeo.setAttribute('position', new Float32BufferAttribute(new Float32Array(8 * BEAM * 3), 3))
+  const beamT = new Float32Array(8 * BEAM)
+  for (let q = 0; q < beamT.length; q++) beamT[q] = (q % BEAM) / (BEAM - 1)
+  beamGeo.setAttribute('aT', new BufferAttribute(beamT, 1))
+  beamGeo.setDrawRange(0, 0)
+  const beamUni = { uTime: { value: 0 }, uAlpha: { value: 0 }, uPR: { value: 1 } }
+  const beams = new Points(beamGeo, new ShaderMaterial({
+    uniforms: beamUni, transparent: true, depthWrite: false, blending: AdditiveBlending,
+    vertexShader: `attribute float aT; uniform float uTime, uPR; varying float vA;
+      void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.); gl_Position = projectionMatrix * mv;
+        float dash = fract(aT * 2.5 - uTime * 1.2); vA = smoothstep(0., 0.15, dash) * smoothstep(0.6, 0.2, dash);
+        gl_PointSize = (2.5 + vA * 5.) * uPR * 6. / max(-mv.z, .1); }`,
+    fragmentShader: `uniform float uAlpha; varying float vA;
+      void main(){ float d = length(gl_PointCoord - .5); if (d > .5) discard;
+        gl_FragColor = vec4(${hex(ACCENT).join(',')}, (1. - d * 2.) * (0.25 + vA) * uAlpha); }`,
+  }))
+  beams.frustumCulled = false
+  latticeRig.inner.add(beams)
   const focusNode = new Vector3()
 
   // Globe: home pin, pulse ring, visitor pin and the arc between them
@@ -495,7 +575,7 @@ export async function createScene(canvas, opts = {}) {
     const t = TIERS[tier]
     const pr = Math.min(devicePixelRatio || 1, t.pr)
     renderer.setPixelRatio(pr)
-    uniforms.uPR.value = dUni.uPR.value = pr
+    uniforms.uPR.value = dUni.uPR.value = beamUni.uPR.value = pr
     geo.setDrawRange(0, Math.min(MAX, t.count))
     fogPlanes.forEach((m) => (m.visible = m.userData.k <= tier))
     // fewer particles → slightly bigger ones so shapes keep their density
@@ -533,14 +613,15 @@ export async function createScene(canvas, opts = {}) {
     stops = anchors.map((el, i) => {
       const top = el.getBoundingClientRect().top + scrollY
       const stage = mobile && i > 0 && !el.matches('.contact') ? parseFloat(getComputedStyle(el).paddingTop) || 0 : 0
+      const see = el.classList.contains('section--see-through')
       return {
-        el, top, stage,
+        el, top, stage, see,
         shape: +el.dataset.shape,
         label: el.dataset.label || '',
         chapter: el.dataset.chapter || '',
         x: mobile ? 0 : parseFloat(el.dataset.x || '0'),
         y: el.dataset.y ? parseFloat(el.dataset.y) : i === 0 ? (mobile ? 0.6 : 0.1) : 0,
-        dim: mobile ? 1 : parseFloat(el.dataset.dim || '1'),
+        dim: mobile ? (see ? 0.8 : 1) : parseFloat(el.dataset.dim || '1'),
       }
     })
     for (let k = 0; k < stops.length - 1; k++) {
@@ -570,7 +651,8 @@ export async function createScene(canvas, opts = {}) {
   function stopY(s, y) {
     if (!mobile || !s.stage) return s.y
     const vh = innerHeight
-    const yScreen = MathUtils.clamp(s.top - y + s.stage * 0.5, vh * 0.26, vh * 0.62)
+    // see-through sections keep the shape mid-screen, behind their (transparent) panel
+    const yScreen = MathUtils.clamp(s.top - y + s.stage * 0.5, vh * (s.see ? 0.4 : 0.26), vh * 0.62)
     return 1 - (2 * yScreen) / vh
   }
 
@@ -628,8 +710,17 @@ export async function createScene(canvas, opts = {}) {
     onPulse?.(nx, ny)
   })
 
-  let spinVel = 0, gDrag = 0
-  function addSpin(dxPx) { spinVel += dxPx * 0.012 }
+  // Direct manipulation: while dragging, the lattice/globe follow the pointer 1:1; on release they coast.
+  let spinVel = 0, gDrag = 0, dragging = false, dragTilt = 0, lastDrag = 0
+  function drag(dxPx, dyPx) {
+    const now = performance.now()
+    const d = dxPx * 0.011
+    spin += d; gDrag += d
+    const dtm = Math.max(8, now - lastDrag) / 1000
+    spinVel = MathUtils.clamp(d / dtm, -8, 8)
+    lastDrag = now
+    dragTilt = MathUtils.clamp(dragTilt + dyPx * 0.006, -0.7, 0.7)
+  }
 
   // ---- Frame state
   const cur = { morph: 0, x: 0, y: 0, dim: 1, live3: 0.2, live4: 0.1, live5: 0 }
@@ -647,7 +738,8 @@ export async function createScene(canvas, opts = {}) {
     const s = stops[i] || stops[0]
     const station = st[i]
     const angle = reduced ? 0 : (p - 0.5) * (mobile ? 0.22 : 0.36)
-    const dolly = reduced ? 0 : (0.5 - p) * 0.8
+    // locating a skill pulls the camera a little closer to the constellation
+    const dolly = (reduced ? 0 : (0.5 - p) * 0.8) - (i === 6 ? uniforms.uFocusAmt.value * 0.7 : 0)
     off.set(-s.x * halfW, -s._y * halfH, 0).applyAxisAngle(Y, angle)
     out.look.copy(station).add(off)
     off.set(-s.x * halfW, -s._y * halfH, 7 + dolly).applyAxisAngle(Y, angle)
@@ -669,10 +761,22 @@ export async function createScene(canvas, opts = {}) {
     cur.x += (tgt.x - cur.x) * k
     cur.dim += (tgt.dim - cur.dim) * k
 
-    if (!reduced) { time += dt; spin += dt * 0.12 }
-    spin += spinVel * dt
-    gDrag += spinVel * dt
-    spinVel *= Math.exp(-dt * 2.2)
+    if (!reduced) time += dt
+    if (!dragging) {
+      if (focusTarget && stopsShape6Near()) {
+        // locate: turn the lattice so the chosen skill faces you
+        let want = -Math.atan2(focusNode.x, focusNode.z)
+        want += Math.round((spin - want) / (PI * 2)) * PI * 2
+        spin += (want - spin) * (1 - Math.exp(-dt * 3.5))
+        spinVel = 0
+      } else {
+        if (!reduced) spin += dt * 0.12
+        spin += spinVel * dt
+        gDrag += spinVel * dt
+      }
+      spinVel *= Math.exp(-dt * 1.6)
+      dragTilt *= Math.exp(-dt * 1.2)
+    }
 
     const j = MathUtils.clamp(cur.morph, 0, JOURNEY - 1)
     const i0 = Math.floor(j), i1 = Math.min(i0 + 1, JOURNEY - 1), f = j - i0
@@ -702,7 +806,7 @@ export async function createScene(canvas, opts = {}) {
 
     // cursor / gyro tilt
     const src = gyro.on ? gyro : mouse
-    const tx = reduced ? 0 : src.y * -0.22
+    const tx = (reduced ? 0 : src.y * -0.22) + dragTilt
     const ty = reduced ? 0 : src.x * 0.35 + Math.sin(time * 0.3) * 0.12
     tilt.x += (tx - tilt.x) * (1 - Math.exp(-dt * 3))
     tilt.y += (ty - tilt.y) * (1 - Math.exp(-dt * 3))
@@ -754,6 +858,9 @@ export async function createScene(canvas, opts = {}) {
       rig.outer.rotation.set(tilt.x, tilt.y, 0)
     }
     latticeRig.inner.rotation.set(0, spin, 0)
+    helixRig.outer.position.copy(st[2])
+    helixRig.outer.scale.setScalar(scale)
+    helixRig.outer.rotation.set(tilt.x, tilt.y, 0)
     globeRig.inner.rotation.set(GLOBE_TILT, uniforms.uSpinG.value, 0)
 
     uniforms.uFocusAmt.value += (focusTarget - uniforms.uFocusAmt.value) * (1 - Math.exp(-dt * 6))
@@ -770,6 +877,10 @@ export async function createScene(canvas, opts = {}) {
     labelAt(labels.home, homeN, globeRig, ga)
     labelAt(labels.visitor, visitorN, globeRig, visitor ? ga : 0)
     labelAt(labels.skill, focusTarget ? focusNode : null, latticeRig, rigAlpha(6) * focusTarget, true)
+    const ha = mobile ? 0 : rigAlpha(2)
+    labels.beads?.forEach((el, b) => labelAt(el, beadLocal[b], helixRig, b === uniforms.uActiveRole.value ? ha : 0, true))
+    beamUni.uTime.value = time
+    beamUni.uAlpha.value = uniforms.uFocusAmt.value * rigAlpha(6)
 
     dUni.uTime.value = time
     for (const m of fogPlanes) m.material.uniforms.uTime.value = time
@@ -833,9 +944,24 @@ export async function createScene(canvas, opts = {}) {
       if (reducedMQ.matches) { uniforms.uIntro.value = 0; return Promise.resolve() }
       return new Promise((done) => { intro = { t: 0, dur: 2.4, done }; setTimeout(() => { fpsArmed = true }, 3500) })
     },
-    setFocus(nodeIndex, related = []) {
-      if (nodeIndex == null) { focusTarget = 0; return }
+    setFocus(nodeIndex, related = [], group = -1) {
+      if (nodeIndex == null) { focusTarget = 0; uniforms.uFocusGroup.value = -1; return }
       focusTarget = 1
+      uniforms.uFocusGroup.value = group
+      const rel = related.filter((r) => r !== nodeIndex).slice(0, 8)
+      rel.forEach((r, k) => uniforms.uRel.value[k].set(...LATTICE_NODES[r]))
+      uniforms.uRelN.value = rel.length
+      // dotted beams that flow from the skill to its group-mates
+      const bp = beamGeo.getAttribute('position')
+      rel.forEach((r, k) => {
+        const a = LATTICE_NODES[nodeIndex], b = LATTICE_NODES[r]
+        for (let q = 0; q < BEAM; q++) {
+          const t = q / (BEAM - 1)
+          bp.setXYZ(k * BEAM + q, a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+        }
+      })
+      bp.needsUpdate = true
+      beamGeo.setDrawRange(0, rel.length * BEAM)
       focusNode.set(...LATTICE_NODES[nodeIndex])
       uniforms.uFocus.value.copy(focusNode)
       const pos = cGeo.getAttribute('position')
@@ -849,9 +975,14 @@ export async function createScene(canvas, opts = {}) {
       pos.needsUpdate = true
       cGeo.setDrawRange(0, s * 2)
     },
-    addSpin,
+    dragStart() { dragging = true; lastDrag = performance.now(); spinVel = 0 },
+    drag,
+    dragEnd() { dragging = false },
+    setActiveRole(i) { uniforms.uActiveRole.value = i },
     setGyro(x, y) { gyro.on = true; gyro.x = MathUtils.clamp(x, -1, 1); gyro.y = MathUtils.clamp(y, -1, 1) },
     setVisitor,
     get tier() { return tier },
+    get settled() { return Math.abs(sample(scrollY).morph - cur.morph) < 0.02 },
+    get debug() { return { focus: uniforms.uFocusAmt.value, focusTarget, morph: uniforms.uMorph.value, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
   }
 }

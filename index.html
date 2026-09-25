@@ -37,6 +37,9 @@
       <span class="geo-label geo-label--home" data-label-home><i></i>Divyam · Thane</span>
       <span class="geo-label" data-label-visitor><i></i><span data-visitor-city>You</span></span>
       <span class="geo-label geo-label--skill" data-label-skill><i></i><span data-skill-name></span></span>
+      <span class="geo-label geo-label--bead" data-label-bead><i></i>ZetaQ · 2026</span>
+      <span class="geo-label geo-label--bead" data-label-bead><i></i>Thinking Engines · 2025</span>
+      <span class="geo-label geo-label--bead" data-label-bead><i></i>Arms Robotics · 2025</span>
     </div>
 
     <header class="nav">
@@ -61,13 +64,14 @@
       </button>
     </header>
 
-    <div class="hud" aria-hidden="true">
-      <span class="hud__index" data-hud-index>01</span>
-      <span class="hud__sep">/</span>
-      <span class="hud__total" data-hud-total>08</span>
-      <span class="hud__chapter" data-hud-chapter>Prologue</span>
-      <span class="hud__label" data-hud-label>neural sphere</span>
-    </div>
+    <nav class="hud" aria-label="Sections">
+      <a href="#top" data-section="Intro">Intro</a>
+      <a href="#about" data-section="About">About</a>
+      <a href="#experience" data-section="Internships">Internships</a>
+      <a href="#projects" data-section="Projects">Projects</a>
+      <a href="#skills" data-section="Skills">Skills</a>
+      <a href="#contact" data-section="Contact">Contact</a>
+    </nav>
     <div class="progress" aria-hidden="true"><span data-progress></span></div>
 
     <button class="sound" type="button" aria-pressed="false" data-sound data-magnetic>
@@ -79,7 +83,7 @@
 
     <main id="main">
       <!-- PROLOGUE -->
-      <section class="hero" id="top" data-shape="0" data-x="0.4" data-label="neural sphere" data-chapter="Prologue">
+      <section class="hero" id="top" data-shape="0" data-x="0.4" data-label="neural sphere" data-chapter="Intro">
         <div class="wrap hero__inner">
           <p class="eyebrow" data-reveal>Full-Stack Developer · Applied AI / ML</p>
           <h1 class="hero__title" data-split>
@@ -112,7 +116,7 @@
       <div class="interlude"><p data-split>Every system starts as <em>a single signal.</em></p></div>
 
       <!-- CHAPTER 1 — ORIGIN -->
-      <section class="section" id="about" data-shape="1" data-x="0.46" data-label="monogram" data-chapter="Ch.01 Origin" aria-labelledby="about-title">
+      <section class="section" id="about" data-shape="1" data-x="0.46" data-label="monogram" data-chapter="About" aria-labelledby="about-title">
         <div class="wrap panel">
           <p class="section__num" data-reveal>Chapter 01 · Origin</p>
           <h2 class="section__title" id="about-title" data-split>Full stack, <em>and</em> the models behind it.</h2>
@@ -151,10 +155,11 @@
       <div class="interlude"><p data-split>Curiosity turned into <em>craft.</em></p></div>
 
       <!-- CHAPTER 2 — CRAFT -->
-      <section class="section" id="experience" data-shape="2" data-x="-0.46" data-label="double helix" data-chapter="Ch.02 Craft" aria-labelledby="exp-title">
+      <section class="section" id="experience" data-shape="2" data-x="-0.46" data-label="double helix" data-chapter="Internships" aria-labelledby="exp-title">
         <div class="wrap wrap--right panel">
           <p class="section__num" data-reveal>Chapter 02 · Craft</p>
           <h2 class="section__title" id="exp-title" data-split>Where I’ve <em>shipped.</em></h2>
+          <p class="section__hint" data-reveal>Each glowing bead on the helix is an internship — it lights up as you read about it, with data flowing between them.</p>
           <ol class="roles">
             <li class="role" data-reveal>
               <div class="role__head">
@@ -197,7 +202,7 @@
           <p class="section__hint" data-reveal>Keep scrolling — each project comes to life as you read.</p>
         </div>
 
-        <article class="project" data-shape="3" data-x="0.46" data-label="live candlesticks" data-chapter="Ch.03 Experiments" aria-labelledby="p1">
+        <article class="project" data-shape="3" data-x="0.46" data-label="live candlesticks" data-chapter="Projects" aria-labelledby="p1">
           <div class="wrap">
             <div class="project__card" data-reveal>
               <p class="project__meta"><span>P/01</span><span>2025 — Present · Personal project</span></p>
@@ -210,7 +215,7 @@
           </div>
         </article>
 
-        <article class="project" data-shape="4" data-x="-0.46" data-label="growing leaf" data-chapter="Ch.03 Experiments" aria-labelledby="p2">
+        <article class="project" data-shape="4" data-x="-0.46" data-label="growing leaf" data-chapter="Projects" aria-labelledby="p2">
           <div class="wrap wrap--right">
             <div class="project__card" data-reveal>
               <p class="project__meta"><span>P/02</span><span>2025 · CSIRO problem statement</span></p>
@@ -221,7 +226,7 @@
           </div>
         </article>
 
-        <article class="project" data-shape="5" data-x="0.46" data-label="turning pages" data-chapter="Ch.03 Experiments" aria-labelledby="p3">
+        <article class="project" data-shape="5" data-x="0.46" data-label="turning pages" data-chapter="Projects" aria-labelledby="p3">
           <div class="wrap">
             <div class="project__card" data-reveal>
               <p class="project__meta"><span>P/03</span><span>2024 — 2025 · Academic project</span></p>
@@ -231,16 +236,32 @@
             </div>
           </div>
         </article>
+
+        <aside class="evolution" aria-labelledby="evo-title">
+          <div class="wrap">
+            <div class="evolution__card" data-reveal>
+              <p class="project__meta"><span>P/00 · Where this site began</span><span>Previous portfolio</span></p>
+              <h3 class="project__title" id="evo-title">Portfolio v1 — <em>“Universe”</em></h3>
+              <p>My first portfolio was a NASA-style solar system: every planet was a doorway to a page, with a built-in AI chatbot. Building it taught me React Three Fiber, real-time 3D and how much a site can say before anyone reads a word.</p>
+              <p>This version is what I learned next — one particle system instead of 30&nbsp;MB of textures, a story you scroll instead of a map you hunt through, and content that works for everyone, on every screen. I keep v1 live as a milestone: proof that I keep trying new things and getting better at them.</p>
+              <ol class="evolution__steps" aria-label="How the portfolio evolved">
+                <li><b>v1 · Universe</b><span>React · React Three Fiber · textured planets · AI chatbot</span></li>
+                <li class="is-now"><b>v2 · This site</b><span>Vanilla Three.js · custom shaders · one particle system · ~150 KB</span></li>
+              </ol>
+              <a class="btn btn--ghost" href="https://divyam-n-portfolio.vercel.app/universe" target="_blank" rel="noopener" data-magnetic>Visit v1 — Universe <span aria-hidden="true">↗</span></a>
+            </div>
+          </div>
+        </aside>
       </section>
 
       <div class="interlude"><p data-split>Each one left behind <em>a tool.</em></p></div>
 
       <!-- CHAPTER 4 — TOOLKIT -->
-      <section class="section drag-zone" id="skills" data-shape="6" data-x="-0.46" data-label="skill constellation" data-chapter="Ch.04 Toolkit" data-cursor="Drag" aria-labelledby="skills-title">
+      <section class="section section--see-through drag-zone" id="skills" data-shape="6" data-x="-0.46" data-label="skill constellation" data-chapter="Skills" data-cursor="Drag" aria-labelledby="skills-title">
         <div class="wrap wrap--right panel">
           <p class="section__num" data-reveal>Chapter 04 · Toolkit</p>
           <h2 class="section__title" id="skills-title" data-split>The <em>toolkit.</em></h2>
-          <p class="section__hint" data-reveal><span class="only-fine">Hover a skill to find it in the constellation — drag the empty space to spin it.</span><span class="only-coarse">Tap a skill to find it in the constellation — swipe sideways to spin it.</span></p>
+          <p class="section__hint" data-reveal><span class="only-fine">Hover or click a skill to locate it — the constellation turns to it and its group’s orbit lights up. Drag anywhere around it to rotate.</span><span class="only-coarse">Tap a skill to locate it in the constellation (tap again to clear). Swipe sideways to rotate.</span></p>
           <div class="skills">
             <div class="skill-group" data-reveal>
               <h3 class="label">Languages</h3>
@@ -265,7 +286,7 @@
       <div class="interlude"><p data-split>Now the signal is <em>yours to answer.</em></p></div>
 
       <!-- EPILOGUE — TRANSMISSION -->
-      <section class="section contact drag-zone" id="contact" data-shape="7" data-x="0" data-y="-0.7" data-dim="0.85" data-label="globe" data-chapter="Epilogue" data-cursor="Drag" aria-labelledby="contact-title">
+      <section class="section contact drag-zone" id="contact" data-shape="7" data-x="0" data-y="-0.7" data-dim="0.85" data-label="globe" data-chapter="Contact" data-cursor="Drag" aria-labelledby="contact-title">
         <div class="wrap contact__inner">
           <p class="section__num" data-reveal>Epilogue · Transmission</p>
           <h2 class="contact__title" id="contact-title" data-split>Let’s build <em>something.</em></h2>
@@ -286,8 +307,6 @@
     <footer class="footer">
       <div class="wrap footer__inner">
         <span>© <span data-year>2026</span> Divyam Navin</span>
-        <span>Built with Three.js — every shape is one particle system</span>
-        <button type="button" class="footer__link" data-open-palette>Press ⌘K / Ctrl K</button>
         <a href="#top">Back to top ↑</a>
       </div>
     </footer>
@@ -335,6 +354,7 @@
               <li><b>Multimodal Stock Prediction</b> — ~60–62% short-term directional accuracy (in progress)</li>
               <li><b>Image-to-Biomass Estimation</b> — CNN + tabular model for biomass &amp; NDVI (CSIRO)</li>
               <li><b>EduSage</b> — full-stack education platform with Gemini-powered interview &amp; quiz flow</li>
+              <li><b>Portfolio v1 “Universe”</b> — earlier 3D solar-system portfolio (React Three Fiber) · <a href="https://divyam-n-portfolio.vercel.app/universe" target="_blank" rel="noopener">view</a></li>
             </ul>
           </section>
           <section>
