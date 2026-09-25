@@ -2,7 +2,7 @@ import {
   WebGLRenderer, Scene, PerspectiveCamera, BufferGeometry, BufferAttribute, Float32BufferAttribute,
   ShaderMaterial, Points, LineSegments, Line, Mesh, RingGeometry, CircleGeometry, LineBasicMaterial,
   MeshBasicMaterial, AdditiveBlending, Group, MathUtils, Vector2, Vector3, Color, DoubleSide,
-  LinearSRGBColorSpace, PlaneGeometry, Vector4,
+  LinearSRGBColorSpace, PlaneGeometry, Vector4, SphereGeometry,
 } from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
@@ -522,6 +522,21 @@ export async function createScene(canvas, opts = {}) {
   beams.frustumCulled = false
   latticeRig.inner.add(beams)
 
+  // Globe body: a dark ocean sphere hides the far side, a fresnel rim gives it an atmosphere
+  const ocean = new Mesh(new SphereGeometry(GLOBE_R * 0.985, 64, 48), new MeshBasicMaterial({ color: raw('#0b1220'), transparent: true, opacity: 0 }))
+  ocean.renderOrder = -0.5
+  globeRig.inner.add(ocean)
+  const atmoUni = { uAlpha: { value: 0 }, uCol: { value: hex('#7fa8ff') } }
+  const atmo = new Mesh(new SphereGeometry(GLOBE_R * 1.1, 64, 48), new ShaderMaterial({
+    uniforms: atmoUni, transparent: true, depthWrite: false, blending: AdditiveBlending,
+    vertexShader: `varying vec3 vN; varying vec3 vV;
+      void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform float uAlpha; uniform vec3 uCol; varying vec3 vN; varying vec3 vV;
+      void main(){ float f = 1. - max(dot(normalize(vN), normalize(vV)), 0.); float rim = pow(f, 2.6) * smoothstep(1., 0.82, f + 0.1);
+        gl_FragColor = vec4(uCol, rim * uAlpha * 0.65); }`,
+  }))
+  globeRig.inner.add(atmo)
+
   // Globe: home pin, pulse ring, visitor pin and the arc between them
   const pinMat = new MeshBasicMaterial({ color: raw(ACCENT), transparent: true, side: DoubleSide, depthWrite: false })
   const ringMat = pinMat.clone()
@@ -619,8 +634,12 @@ export async function createScene(canvas, opts = {}) {
       const top = el.getBoundingClientRect().top + scrollY
       const stage = mobile && i > 0 && !el.matches('.contact') ? parseFloat(getComputedStyle(el).paddingTop) || 0 : 0
       const see = el.classList.contains('section--see-through')
+      // a section can reserve an empty block for its shape (the contact globe sits under the text)
+      const gs = el.querySelector('[data-globe-stage]')
+      const gr = gs?.getBoundingClientRect()
       return {
         el, top, stage, see,
+        gsMid: gr ? gr.top + scrollY + gr.height / 2 : null,
         shape: +el.dataset.shape,
         label: el.dataset.label || '',
         chapter: el.dataset.chapter || '',
@@ -655,6 +674,11 @@ export async function createScene(canvas, opts = {}) {
 
   // On phones the shape sits in the empty "stage" above each section's text and follows it up.
   function stopY(s, y) {
+    if (s.gsMid != null) {
+      // follow the reserved block as it scrolls, so the shape never overlaps the text above it
+      const yScreen = MathUtils.clamp(s.gsMid - y, -0.3 * innerHeight, 1.3 * innerHeight)
+      return 1 - (2 * yScreen) / innerHeight
+    }
     if (!mobile || !s.stage) return s.y
     const vh = innerHeight
     // see-through sections keep the shape mid-screen, behind their (transparent) panel
@@ -866,6 +890,9 @@ export async function createScene(canvas, opts = {}) {
     const ga = rigAlpha(S.GLOBE)
     const pulse = (time * 0.7) % 1
     pinMat.opacity = ga
+    ocean.material.opacity = ga * 0.96
+    ocean.visible = atmo.visible = ga > 0.01
+    atmoUni.uAlpha.value = ga
     ringMat.opacity = ga * (1 - pulse)
     homeRing.scale.setScalar(1 + pulse * 2.5)
     visitorPin.material.opacity = ga * 0.9

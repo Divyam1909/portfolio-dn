@@ -69,21 +69,14 @@ export function initCursor() {
   const ring = document.createElement('div')
   dot.className = 'cursor'
   ring.className = 'cursor-ring'
-  ring.innerHTML = '<span></span>'
   document.body.append(dot, ring)
   document.documentElement.classList.add('has-cursor')
-  const label = ring.firstChild
   let x = innerWidth / 2, y = innerHeight / 2, rx = x, ry = y, shown = false
   addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse') return
     x = e.clientX; y = e.clientY
     if (!shown) { shown = true; rx = x; ry = y; document.documentElement.classList.add('cursor-on') }
-    const t = e.target.closest?.('a, button, [data-skill], input, [data-cursor]')
-    const interactive = t && t.matches('a, button, [data-skill], input')
-    ring.classList.toggle('is-link', !!interactive)
-    const text = interactive ? t.dataset.cursor || '' : t?.dataset.cursor || ''
-    label.textContent = text
-    ring.classList.toggle('has-label', !!text)
+    ring.classList.toggle('is-link', !!e.target.closest?.('a, button, input'))
   }, { passive: true })
   document.addEventListener('pointerleave', () => { shown = false; document.documentElement.classList.remove('cursor-on') })
   addEventListener('pointerdown', () => ring.classList.add('is-down'))

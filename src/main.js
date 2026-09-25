@@ -250,6 +250,8 @@ async function boot() {
   } else {
     root.classList.add('no-webgl')
   }
+  // interactions work as soon as the scene exists (or without it), not only after the intro
+  initInteractions()
   target = 1
   await wait(reduced ? 0 : 380)
   if (api && !reduced) {
@@ -260,7 +262,6 @@ async function boot() {
   }
   root.classList.add('is-loaded')
   setTimeout(startReveals, reduced ? 0 : 150)
-  initInteractions()
 }
 
 // Safety net: never let the loader trap content
@@ -278,7 +279,6 @@ function initInteractions() {
   const detailEmpty = detail.innerHTML
   skills.forEach((btn, i) => {
     btn.dataset.node = nodeFor(i)
-    btn.dataset.cursor = 'Show'
     btn.setAttribute('aria-pressed', 'false')
   })
   const select = (btn) => {

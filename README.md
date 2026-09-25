@@ -12,7 +12,7 @@ A single-page portfolio told as an interactive journey. One Three.js particle sy
 | ↳ Arms Robotics | Chip → dashboard | Pulses run along PCB traces into a live waveform |
 | Projects | Candlesticks → leaf → book → solar system | Candles draw in, the leaf grows, pages turn as you read; planets orbit for Portfolio v1 |
 | Skills | Lattice with project stars | Click a skill: links fly to the projects that used it, bright and solid for strong skills, faint and dashed for familiar ones. A panel lists the level and the projects (click one to jump to it). Drag to rotate |
-| Contact | Globe (real continents) | Pin on Thane, arcs to tech hubs, your approximate location from your time zone; drag to spin |
+| Contact | Globe (real continents, ocean sphere, atmosphere) sitting below the text | Pin on Thane, arcs to tech hubs, your approximate location from your time zone; drag to spin |
 
 **Everywhere:** the cursor pushes particles aside, a click or tap sends a shockwave, and phones respond to tilt (gyroscope).
 

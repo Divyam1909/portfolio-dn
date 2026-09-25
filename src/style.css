@@ -426,7 +426,9 @@ main, .footer { position: relative; z-index: 2; }
 .skill-group .label { margin-bottom: 4px; }
 
 /* ---------- Contact ---------- */
-.contact { min-height: 100vh; min-height: 100svh; display: flex; align-items: center; text-align: center; }
+.contact { text-align: center; padding-bottom: 0; }
+/* empty stage under the text: the 3D globe sits here, never behind the words */
+.contact__globe { width: 100%; height: clamp(420px, 78vh, 820px); }
 .contact__inner { display: grid; justify-items: center; }
 .section .contact__inner > * { max-width: none; }
 .contact__title { font-size: clamp(3.2rem, 10vw, 9.5rem); margin-bottom: 36px; }
@@ -582,10 +584,7 @@ button.btn { font-family: inherit; cursor: pointer; }
   display: grid; place-items: center;
   transition: opacity 0.3s, width 0.35s var(--ease), height 0.35s var(--ease), margin 0.35s var(--ease), background 0.35s, border-color 0.35s;
 }
-.cursor-ring span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-ink); opacity: 0; transition: opacity 0.2s; }
 .cursor-ring.is-link { width: 58px; height: 58px; margin: -29px 0 0 -29px; border-color: var(--accent); background: rgba(200, 255, 77, 0.08); }
-.cursor-ring.has-label { width: 74px; height: 74px; margin: -37px 0 0 -37px; background: var(--accent); border-color: var(--accent); }
-.cursor-ring.has-label span { opacity: 1; }
 .cursor-ring.is-down { width: 26px; height: 26px; margin: -13px 0 0 -13px; }
 .dialog-open .cursor, .dialog-open .cursor-ring { z-index: 2147483647; }
 
@@ -661,7 +660,8 @@ dialog::backdrop { background: rgba(5, 5, 7, 0.72); -webkit-backdrop-filter: blu
   .section--see-through .tags--lg button { background: rgba(14, 14, 17, 0.92); }
   .stat { backdrop-filter: none; -webkit-backdrop-filter: none; background: #111114; }
   .interlude { min-height: 70svh; }
-  .contact { align-items: flex-start; padding-top: 22svh; }
+  .contact { padding-top: 18svh; }
+  .contact__globe { height: 62svh; }
   .sound { right: 16px; bottom: 16px; padding: 10px 12px; }
   .sound__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .toasts { bottom: 70px; }
