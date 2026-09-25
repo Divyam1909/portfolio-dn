@@ -359,7 +359,6 @@ main, .footer { position: relative; z-index: 2; }
 @keyframes ping { 70% { box-shadow: 0 0 0 10px rgba(200, 255, 77, 0); } 100% { box-shadow: 0 0 0 0 rgba(200, 255, 77, 0); } }
 
 /* ---------- Evolution (previous portfolio) ---------- */
-.evolution { padding: 4vh 0 16vh; }
 .evolution__card {
   max-width: 720px;
   padding: clamp(24px, 3.2vw, 44px); border-radius: 22px;
@@ -388,7 +387,41 @@ main, .footer { position: relative; z-index: 2; }
   .evolution__card { background: rgba(14, 14, 17, 0.94); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
+/* ---------- Internships ---------- */
+.section-head { display: flex; align-items: center; min-height: 80vh; min-height: 80svh; }
+.section-head .section__title { margin-bottom: 20px; }
+.project__title a { text-decoration: none; background: linear-gradient(var(--accent), var(--accent)) 0 100% / 0 1px no-repeat; transition: background-size 0.4s var(--ease), color 0.3s; }
+.project__title a:hover { color: var(--accent); background-size: 100% 1px; }
+
 /* ---------- Skills ---------- */
+.skill-detail {
+  position: sticky; top: 88px; z-index: 3; margin-bottom: 14px;
+  padding: 16px 18px; border-radius: 16px; border: 1px solid var(--line);
+  background: rgba(14, 14, 17, 0.9); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  min-height: 64px;
+}
+.skill-detail__empty { color: var(--muted); font-size: 0.92em; }
+.skill-detail__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; }
+.skill-detail__name { font-family: var(--serif); font-size: 1.7rem; line-height: 1.1; color: var(--fg); }
+.skill-level { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.skill-level__bars { display: inline-flex; gap: 4px; }
+.skill-level__bars i { width: 18px; height: 4px; border-radius: 2px; background: rgba(238, 237, 231, 0.14); }
+.skill-level__bars i.on { background: var(--accent); box-shadow: 0 0 10px rgba(200, 255, 77, 0.55); }
+.skill-level[data-level='1'] { color: var(--muted); }
+.skill-level[data-level='1'] .skill-level__bars i.on { box-shadow: none; opacity: 0.55; }
+.skill-detail__used { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.9em; color: var(--muted); }
+.skill-detail__used button {
+  font: inherit; font-size: 13px; cursor: pointer; color: var(--fg); background: rgba(200, 255, 77, 0.07);
+  border: 1px solid rgba(200, 255, 77, 0.35); border-radius: 999px; padding: 6px 12px; min-height: 34px;
+  transition: background 0.3s, border-color 0.3s;
+}
+.skill-detail__used button:hover { background: rgba(200, 255, 77, 0.16); border-color: var(--accent); }
+.skill-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 28px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.skill-legend__line { display: inline-block; width: 26px; height: 0; margin-right: -6px; border-top: 2px solid var(--accent); vertical-align: middle; }
+.skill-legend__line--3 { box-shadow: 0 0 8px var(--accent); }
+.skill-legend__line--2 { border-top-style: dashed; opacity: 0.75; }
+.skill-legend__line--1 { border-top: 2px dotted; border-color: var(--accent); opacity: 0.4; }
+.geo-label--proj { font-size: 10.5px; color: var(--fg); border-color: rgba(200, 255, 77, 0.35); }
 .skills { display: grid; gap: 36px; }
 .skill-group .label { margin-bottom: 4px; }
 
@@ -416,7 +449,7 @@ main, .footer { position: relative; z-index: 2; }
 /* ---------- Section sidebar ---------- */
 .hud {
   position: fixed; left: 18px; top: 50%; z-index: 40;
-  display: flex; flex-direction: column-reverse; align-items: center; gap: 22px;
+  display: flex; flex-direction: column; align-items: center; gap: 22px;
   transform: translateY(-50%);
   opacity: 0; transition: opacity 0.6s;
 }
@@ -502,8 +535,6 @@ button.btn { font-family: inherit; cursor: pointer; }
 .geo-label i { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--fg); vertical-align: 1px; }
 .geo-label--home i, .geo-label--skill i { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 .geo-label--skill { color: var(--accent); }
-.geo-label--bead { font-size: 10.5px; }
-.geo-label--bead i { background: var(--accent); }
 .is-dragging, .is-dragging * { user-select: none; -webkit-user-select: none; }
 .has-cursor.cursor-on .drag-zone { cursor: none; }
 
@@ -612,8 +643,10 @@ dialog::backdrop { background: rgba(5, 5, 7, 0.72); -webkit-backdrop-filter: blu
   .grain { display: none; }
   .leaks { opacity: 0.6; --half: 60vmax; }
   .leak { width: 120vmax; height: 120vmax; }
-  .section[data-shape]:not(.contact), .project { padding-top: 58svh; }
+  .section[data-shape]:not(.contact), .project, .section-head { padding-top: 58svh; }
+  .section-head { min-height: 0; }
   .section[data-shape]:not(.contact) > .panel,
+  .section-head > .panel,
   .project .project__card {
     position: relative;
     background: linear-gradient(to bottom, rgba(9, 9, 11, 0) 0, rgba(9, 9, 11, 0.94) 90px);

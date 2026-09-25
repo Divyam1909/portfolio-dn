@@ -1,7 +1,6 @@
 // Point-cloud generators. Each returns { pos, order } where `pos` holds exactly `n`
 // xyz points (roughly within a radius of ~2.2 units) and `order` holds 4 floats per
-// point used by the "living" scenes (candle time, leaf growth, page flip u/v), plus
-// 4 more (order2) for the helix beads/packets and the skill-orbit rings.
+// point that the shader uses to animate that shape (packets, waves, orbits, page flips…).
 // Points are shuffled so any prefix of the buffer is an even sample of the whole
 // shape — that lets the renderer draw fewer particles on slower devices.
 
@@ -35,7 +34,7 @@ function randomOnSphere(r) {
 function compose(n, seed, parts) {
   const r = rng(seed)
   const pos = new Float32Array(n * 3)
-  const order = new Float32Array(n * 8).fill(-1)
+  const order = new Float32Array(n * 4).fill(-1)
   const total = parts.reduce((a, p) => a + p[0], 0)
   let i = 0
   parts.forEach(([w, fn], k) => {
@@ -43,14 +42,14 @@ function compose(n, seed, parts) {
     for (let c = 0; c < count && i < n; c++, i++) {
       const p = fn(c, count, r)
       pos.set(p.slice(0, 3), i * 3)
-      if (p.length > 3) order.set(p.slice(3), i * 8)
+      if (p.length > 3) order.set(p.slice(3, 7), i * 4)
     }
   })
   // Fisher–Yates shuffle, keeping pos/order pairs together
   for (let a = n - 1; a > 0; a--) {
     const b = Math.floor(r() * (a + 1))
     for (let k = 0; k < 3; k++) { const t = pos[a * 3 + k]; pos[a * 3 + k] = pos[b * 3 + k]; pos[b * 3 + k] = t }
-    for (let k = 0; k < 8; k++) { const t = order[a * 8 + k]; order[a * 8 + k] = order[b * 8 + k]; order[b * 8 + k] = t }
+    for (let k = 0; k < 4; k++) { const t = order[a * 4 + k]; order[a * 4 + k] = order[b * 4 + k]; order[b * 4 + k] = t }
   }
   return { pos, order }
 }
@@ -130,43 +129,166 @@ function textShape(n, seed, text, font, width) {
 /* 1 — "DN" monogram */
 export const monogram = (n) => textShape(n, 21, 'DN', "italic 400 270px 'Instrument Serif', 'Times New Roman', serif", 3.6)
 
-/* 2 — Double helix (data pipelines) with one glowing bead per internship and data
-   packets that stream along the strands. order2: x = strand * 2 + packet t, y = bead index. */
-export const HELIX = { L: 1.6, R: 0.52, TURNS: 2.2, ROT: [0.35, 0.25, -0.18], BEADS: [0.8, 0.5, 0.2] }
-export const helixPoint = (p) => rotate(p, ...HELIX.ROT)
-export const HELIX_BEADS = HELIX.BEADS.map((t) => helixPoint([t * 2 * HELIX.L - HELIX.L, 0, 0]))
+/* Double helix (Internships intro) with data packets streaming along the strands.
+   order.x = strand * 2 + packet t */
+export const HELIX = { L: 1.6, R: 0.52, TURNS: 2.2, ROT: [0.35, 0.25, -0.18] }
 export function helix(n) {
   const { L, R, TURNS } = HELIX
   const at = (t, phase, rad = R) => {
     const a = t * TURNS * TAU + phase
     return [t * 2 * L - L, Math.cos(a) * rad, Math.sin(a) * rad]
   }
-  const tilt = helixPoint
-  const NONE = [-1, -1, -1, -1]
+  const tilt = (p) => rotate(p, ...HELIX.ROT)
   return compose(n, 31, [
-    [30, (i, c, r) => { const p = at(r(), 0); return tilt([p[0], p[1] + gauss(r) * 0.035, p[2] + gauss(r) * 0.035]) }],
-    [30, (i, c, r) => { const p = at(r(), Math.PI); return tilt([p[0], p[1] + gauss(r) * 0.035, p[2] + gauss(r) * 0.035]) }],
-    [14, (i, c, r) => {
+    [36, (i, c, r) => { const p = at(r(), 0); return tilt([p[0], p[1] + gauss(r) * 0.035, p[2] + gauss(r) * 0.035]) }],
+    [36, (i, c, r) => { const p = at(r(), Math.PI); return tilt([p[0], p[1] + gauss(r) * 0.035, p[2] + gauss(r) * 0.035]) }],
+    [16, (i, c, r) => {
       const rung = Math.floor(r() * 34)
       const t = (rung + 0.5) / 34
       const a = at(t, 0), b = at(t, Math.PI), s = r()
       return tilt([a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s])
     }],
-    [10, (i, c, r) => {
-      // data packets: short dashes that travel along the outside of each strand
+    [8, (i, c, r) => {
       const strand = r() < 0.5 ? 0 : 1
       const t = (Math.floor(r() * 9) / 9 + r() * 0.035) % 1
-      return [...tilt(at(t, strand * Math.PI, R * 1.22)), ...NONE, t + strand * 2, -1, -1, -1]
-    }],
-    [12, (i, c, r) => {
-      // one bead per internship: a dense core wrapped in a thin orbit shell
-      const b = i % 3
-      const c0 = HELIX_BEADS[b]
-      const shell = r() < 0.35
-      const d = shell ? randomOnSphere(r).map((v) => v * 0.26) : [gauss(r) * 0.07, gauss(r) * 0.07, gauss(r) * 0.07]
-      return [c0[0] + d[0], c0[1] + d[1], c0[2] + d[2], ...NONE, -1, b, -1, -1]
+      return [...tilt(at(t, strand * Math.PI, R * 1.22)), t + strand * 2]
     }],
     [4, (i, c, r) => tilt([(r() * 2 - 1) * L * 1.1, gauss(r) * 0.9, gauss(r) * 0.9])],
+  ])
+}
+
+/* ---------- Internship models ---------- */
+// helpers: points on a line segment / rectangle outline / filled rectangle (in a plane)
+const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+const jitter = (p, r, s) => [p[0] + gauss(r) * s, p[1] + gauss(r) * s, p[2] + gauss(r) * s]
+function rectEdge(r, w, h) {
+  // random point on the outline of a w×h rectangle centred at 0 (x, y)
+  const per = 2 * (w + h), d = r() * per
+  if (d < w) return [d - w / 2, h / 2]
+  if (d < w + h) return [w / 2, h / 2 - (d - w)]
+  if (d < 2 * w + h) return [w / 2 - (d - w - h), -h / 2]
+  return [-w / 2, -h / 2 + (d - 2 * w - h)]
+}
+
+/* ZetaQ — PDFs flow through an LLM core and come out as tidy study cards.
+   Flow particles: order = (phase, laneY, laneZ, 1). Tilt is applied in the shader too. */
+export const PIPE_ROT = [0.12, -0.42, 0]
+export function pipeline(n) {
+  const T = (p) => rotate(p, ...PIPE_ROT)
+  const sheet = (k, r) => {
+    // three stacked, slightly fanned PDF pages on the left
+    const ox = -1.62 + k * 0.1, oy = 0.12 - k * 0.12, oz = -k * 0.16
+    const w = 0.95, h = 1.25
+    const q = r()
+    let x, y
+    if (q < 0.45) { [x, y] = rectEdge(r, w, h) }
+    else if (q < 0.8) { const row = Math.floor(r() * 9); y = h / 2 - 0.2 - row * 0.11; x = -w / 2 + 0.12 + r() * (row % 3 === 2 ? 0.45 : 0.7) }
+    else { x = (r() - 0.5) * w; y = (r() - 0.5) * h }
+    return T(jitter([ox + x, oy + y, oz], r, 0.006))
+  }
+  return compose(n, 131, [
+    [30, (i, c, r) => sheet(i % 3, r)],
+    [20, (i, c, r) => {
+      // LLM core: a ring the data passes through, around a bright nucleus
+      if (r() < 0.55) { const a = r() * TAU; return T(jitter([0, Math.sin(a) * 0.62, Math.cos(a) * 0.62], r, 0.02)) }
+      const d = randomOnSphere(r).map((v) => v * 0.26 * Math.cbrt(r()))
+      return T(d)
+    }],
+    [24, (i, c, r) => {
+      // output: a clean 2×3 grid of study cards
+      const k = i % 6, col = k % 2, row = Math.floor(k / 2)
+      const cx = 1.25 + col * 0.62, cy = 0.62 - row * 0.62
+      const w = 0.5, h = 0.46
+      let x, y
+      if (r() < 0.55) [x, y] = rectEdge(r, w, h)
+      else { const line = Math.floor(r() * 3); y = h / 2 - 0.12 - line * 0.11; x = -w / 2 + 0.08 + r() * (line === 0 ? 0.34 : 0.22) }
+      return T(jitter([cx + x, cy + y, 0], r, 0.005))
+    }],
+    [26, (i, c, r) => {
+      // the flow: lanes that converge into the core and fan out again
+      const laneY = (r() - 0.5) * 1.1, laneZ = (r() - 0.5) * 0.5
+      return [...T([0, 0, 0]), r(), laneY, laneZ, 1]
+    }],
+  ])
+}
+
+/* Thinking Engines — full stack as three floating layers: UI, API, database.
+   Packets rising between layers: order = (phase, laneX, laneZ, 1). */
+export const STACK_ROT = [0.62, 0.62, 0]
+export function stack(n) {
+  const T = (p) => rotate(p, ...STACK_ROT)
+  const W = 2.3, Dp = 1.5
+  return compose(n, 141, [
+    [34, (i, c, r) => {
+      // top: a browser window laid flat — frame, tab bar, dots, content blocks
+      const y = 0.95, q = r()
+      let x, z
+      if (q < 0.35) { const e = rectEdge(r, W, Dp); x = e[0]; z = e[1] }
+      else if (q < 0.45) { x = (r() - 0.5) * W; z = -Dp / 2 + 0.2 }
+      else if (q < 0.5) { const d = Math.floor(r() * 3); const a = r() * TAU; x = -W / 2 + 0.14 + d * 0.12 + Math.cos(a) * 0.035; z = -Dp / 2 + 0.1 + Math.sin(a) * 0.035 }
+      else if (q < 0.72) { x = -W / 2 + 0.18 + r() * (W - 0.36); z = -Dp / 2 + 0.34 + r() * 0.4 }
+      else { const k = Math.floor(r() * 3); const e = rectEdge(r, 0.6, 0.42); x = -0.72 + k * 0.72 + e[0]; z = 0.38 + e[1] }
+      return T(jitter([x, y, z], r, 0.006))
+    }],
+    [22, (i, c, r) => {
+      // middle: API layer — a plate with a grid of connected endpoints
+      const y = 0, q = r()
+      if (q < 0.3) { const e = rectEdge(r, W * 0.86, Dp * 0.86); return T(jitter([e[0], y, e[1]], r, 0.006)) }
+      const gx = Math.floor(r() * 4), gz = Math.floor(r() * 3)
+      const nx = -0.75 + gx * 0.5, nz = -0.4 + gz * 0.4
+      if (q < 0.65) return T(jitter([nx, y, nz], r, 0.03))
+      const horiz = r() < 0.5, t = r()
+      return T(jitter(horiz && gx < 3 ? [nx + t * 0.5, y, nz] : gz < 2 ? [nx, y, nz + t * 0.4] : [nx, y, nz], r, 0.006))
+    }],
+    [26, (i, c, r) => {
+      // bottom: database cylinder built from stacked disks
+      const R = 0.6, q = r(), a = r() * TAU
+      if (q < 0.6) { const k = Math.floor(r() * 3); return T(jitter([Math.cos(a) * R, -1.15 + k * 0.2, Math.sin(a) * R], r, 0.008)) }
+      if (q < 0.85) return T(jitter([Math.cos(a) * R, -1.15 + r() * 0.4, Math.sin(a) * R], r, 0.01))
+      return T(jitter([Math.cos(a) * R * Math.sqrt(r()), -0.75, Math.sin(a) * R * Math.sqrt(r())], r, 0.005))
+    }],
+    [18, (i, c, r) => {
+      const laneX = [-0.5, 0, 0.5][i % 3] + gauss(r) * 0.02, laneZ = [0.1, -0.2, 0.25][i % 3] + gauss(r) * 0.02
+      return [...T([laneX, 0, laneZ]), r(), laneX, laneZ, 1]
+    }],
+  ])
+}
+
+/* Arms Robotics — a microchip streaming real-time data over traces to a live dashboard.
+   Waveform particles: order.x = u along the wave. Trace particles: order.y = t along the trace. */
+export const CHIP_ROT = [0.3, -0.34, 0]
+export function chip(n) {
+  const T = (p) => rotate(p, ...CHIP_ROT)
+  const cx = -1.15
+  const traces = [0.28, 0.1, -0.1, -0.28].map((y, k) => [[cx + 0.62, y, 0], [cx + 0.95 + k * 0.08, y, 0], [cx + 0.95 + k * 0.08, y * 0.5 - 0.1, 0], [0.45, y * 0.5 - 0.1, 0]])
+  const tracePoint = (tr, t) => {
+    const lens = [0, 1, 2].map((s) => Math.hypot(...tr[s + 1].map((v, k) => v - tr[s][k])))
+    let d = t * lens.reduce((a, b) => a + b)
+    for (let s = 0; s < 3; s++) { if (d <= lens[s] || s === 2) return lerp3(tr[s], tr[s + 1], Math.min(1, d / lens[s])); d -= lens[s] }
+  }
+  return compose(n, 151, [
+    [30, (i, c, r) => {
+      // chip: package outline, fill, inner die and pins on all four sides
+      const q = r()
+      if (q < 0.3) { const e = rectEdge(r, 1.1, 1.1); return T(jitter([cx + e[0], e[1], 0], r, 0.006)) }
+      if (q < 0.5) { const e = rectEdge(r, 0.5, 0.5); return T(jitter([cx + e[0], e[1], 0.02], r, 0.005)) }
+      if (q < 0.62) return T([cx + (r() - 0.5) * 1.05, (r() - 0.5) * 1.05, -0.01])
+      const side = Math.floor(r() * 4), k = Math.floor(r() * 7), t = r()
+      const off = -0.42 + k * 0.14, len = 0.16
+      const pts = [[cx + off, 0.55 + t * len], [cx + off, -0.55 - t * len], [cx - 0.55 - t * len, off], [cx + 0.55 + t * len, off]]
+      return T(jitter([...pts[side], 0], r, 0.006))
+    }],
+    [16, (i, c, r) => { const t = r(); return [...T(jitter(tracePoint(traces[i % 4], t), r, 0.006)), -1, t] }],
+    [24, (i, c, r) => {
+      // dashboard panel with header, axis and a small bar chart
+      const px = 1.25, q = r()
+      if (q < 0.45) { const e = rectEdge(r, 1.55, 1.15); return T(jitter([px + e[0], e[1], 0], r, 0.006)) }
+      if (q < 0.55) return T(jitter([px - 0.7 + r() * 1.4, 0.4, 0], r, 0.005))
+      if (q < 0.65) return T(jitter([px - 0.65 + r() * 1.3, -0.12, 0], r, 0.004))
+      const b = Math.floor(r() * 6), h = [0.18, 0.3, 0.22, 0.36, 0.26, 0.4][b]
+      return T(jitter([px - 0.6 + b * 0.16 + (r() - 0.5) * 0.08, -0.5 + r() * h, 0], r, 0.004))
+    }],
+    [30, (i, c, r) => [...T([0, 0, 0]), r()]],
   ])
 }
 
@@ -280,11 +402,15 @@ for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) for (let k = 0; k < G; k
   LATTICE_NODES.push([(i / (G - 1) - 0.5) * GS, (j / (G - 1) - 0.5) * GS, (k / (G - 1) - 0.5) * GS])
 }
 // order2: z = skill-group ring (0 Languages, 1 Web, 2 AI/ML, 3 Data & tools), w = angle 0..1
-export const RING_TILTS = [[1.2, 0, 0.3], [0.4, 0.9, -0.2], [-0.9, 0.3, 0.6], [0.1, -0.7, 1.1]]
+// Project "stars" orbit the lattice; skills link to them. order.x = project index.
+export const PROJECT_NODES = Array.from({ length: 8 }, (_, k) => {
+  const a = (k / 8) * TAU + 0.2
+  return [Math.cos(a) * 1.72, (k % 2 ? 0.5 : -0.4) + Math.sin(k * 1.7) * 0.2, Math.sin(a) * 1.72]
+})
 export function lattice(n) {
   const node = (i, j, k) => LATTICE_NODES[i * G * G + j * G + k]
   return compose(n, 71, [
-    [64, (c, count, r) => {
+    [66, (c, count, r) => {
       const axis = Math.floor(r() * 3)
       const a = Math.floor(r() * G), b = Math.floor(r() * G), s = Math.floor(r() * (G - 1))
       const f = r()
@@ -292,15 +418,38 @@ export function lattice(n) {
       const p0 = node(...ids[0]), p1 = node(...ids[1])
       return [0, 1, 2].map((q) => p0[q] + (p1[q] - p0[q]) * f + gauss(r) * 0.006)
     }],
-    [16, (c, count, r) => {
+    [24, (c, count, r) => {
       const p = node(Math.floor(r() * G), Math.floor(r() * G), Math.floor(r() * G))
       return [p[0] + gauss(r) * 0.045, p[1] + gauss(r) * 0.045, p[2] + gauss(r) * 0.045]
     }],
-    [20, (i, c, r) => {
-      // four orbit rings — one per skill group — animated in the shader
-      const g = i % 4, w = r()
-      const a = w * TAU, rad = 1.75 + g * 0.12
-      return [...rotate([Math.cos(a) * rad, 0, Math.sin(a) * rad], ...RING_TILTS[g]), -1, -1, -1, -1, -1, -1, g, w]
+    [10, (i, c, r) => {
+      const k = i % PROJECT_NODES.length, p = PROJECT_NODES[k]
+      return [...jitter(p, r, 0.055), k]
+    }],
+  ])
+}
+
+/* Portfolio v1 "Universe" — a small solar system, a nod to the old site.
+   Stored untilted; the shader orbits the planets and applies SOLAR_ROT.
+   Planets: order = (orbit radius, start angle, speed, 1). Sun: order.w = 2. */
+export const SOLAR_ROT = [0.5, 0, 0.18]
+const ORBITS = [[0.8, 0.07, 0.5], [1.15, 0.1, 0.36], [1.55, 0.13, 0.27], [1.95, 0.2, 0.19], [2.35, 0.15, 0.13]]
+export function solar(n) {
+  return compose(n, 161, [
+    [22, (i, c, r) => {
+      const d = randomOnSphere(r), k = 0.42 * Math.pow(r(), 0.35)
+      return [d[0] * k, d[1] * k, d[2] * k, -1, -1, -1, 2]
+    }],
+    [40, (i, c, r) => {
+      const o = ORBITS[i % ORBITS.length], a = r() * TAU
+      return [Math.cos(a) * o[0], gauss(r) * 0.006, Math.sin(a) * o[0]]
+    }],
+    [38, (i, c, r) => {
+      const k = i % ORBITS.length, o = ORBITS[k]
+      let d
+      if (k === 3 && r() < 0.45) { const a = r() * TAU, rr = o[1] * (1.6 + r() * 0.7); d = rotate([Math.cos(a) * rr, 0, Math.sin(a) * rr], 0.35, 0, 0.2) }
+      else d = randomOnSphere(r).map((v) => v * o[1] * Math.cbrt(r()))
+      return [...d, o[0], k * 1.3 + 0.4, o[2], 1]
     }],
   ])
 }
@@ -353,4 +502,5 @@ export function globe(n) {
   ])
 }
 
-export const SHAPES = [neuralSphere, monogram, helix, candles, leaf, book, lattice, globe]
+// order matters: it is the order of the chapters on the page
+export const SHAPES = [neuralSphere, monogram, helix, pipeline, stack, chip, candles, leaf, book, solar, lattice, globe]

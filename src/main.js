@@ -2,6 +2,7 @@ import './style.css'
 import Lenis from 'lenis'
 import { createAudio } from './audio.js'
 import { guessVisitor } from './visitor.js'
+import { SKILLS, PROJECTS, LEVELS } from './skills.js'
 import {
   toast, initScramble, initMagnetic, initCursor,
   initQuick, openQuick, initPalette,
@@ -235,7 +236,7 @@ async function boot() {
       api = await createScene($('.webgl'), {
         onShapeChange,
         onProgress: (p) => (target = 0.15 + p * 0.85),
-        labels: { home: $('[data-label-home]'), visitor: $('[data-label-visitor]'), skill: $('[data-label-skill]'), beads: $$('[data-label-bead]') },
+        labels: { home: $('[data-label-home]'), visitor: $('[data-label-visitor]'), skill: $('[data-label-skill]'), projects: $$('[data-label-proj]') },
         onPulse: (nx) => audio.pluck(nx),
         onFrame: (s) => audio.update(s),
       })
@@ -273,41 +274,33 @@ function initInteractions() {
   const skills = $$('[data-skill]')
   const nodeFor = (i) => (i * 29 + 7) % 64
   const skillName = $('[data-skill-name]')
+  const detail = $('[data-skill-detail]')
+  const detailEmpty = detail.innerHTML
   skills.forEach((btn, i) => {
     btn.dataset.node = nodeFor(i)
-    btn.dataset.cursor = 'Locate'
+    btn.dataset.cursor = 'Show'
+    btn.setAttribute('aria-pressed', 'false')
   })
-  const groups = $$('.skill-group')
-  let leaveTimer = 0
-  const focus = (btn) => {
-    clearTimeout(leaveTimer)
+  const select = (btn) => {
     skills.forEach((b) => {
       b.classList.toggle('is-focus', b === btn)
       b.setAttribute('aria-pressed', String(b === btn))
     })
-    if (!btn) { api?.setFocus(null); return }
-    const groupEl = btn.closest('.skill-group')
-    const related = [...groupEl.querySelectorAll('[data-skill]')].map((b) => +b.dataset.node)
-    api?.setFocus(+btn.dataset.node, related, groups.indexOf(groupEl))
-    skillName.textContent = btn.textContent
+    if (!btn) { api?.setFocus(null); detail.innerHTML = detailEmpty; return }
+    const name = btn.textContent.trim()
+    const info = SKILLS[name] || { level: 1, projects: [] }
+    api?.setFocus(+btn.dataset.node, info.projects.map((k) => ({ k, s: info.level })))
+    skillName.textContent = name
+    const bars = [1, 2, 3].map((n) => `<i class="${n <= info.level ? 'on' : ''}"></i>`).join('')
+    const used = info.projects.length
+      ? `<span>Used in</span>${info.projects.map((k) => `<button type="button" data-goto="${PROJECTS[k].target}">${PROJECTS[k].name}</button>`).join('')}`
+      : '<span>Used in coursework and practice projects.</span>'
+    detail.innerHTML = `<div class="skill-detail__head"><span class="skill-detail__name">${name}</span>
+      <span class="skill-level" data-level="${info.level}"><span class="skill-level__bars" aria-hidden="true">${bars}</span>${LEVELS[info.level]}</span></div>
+      <div class="skill-detail__used">${used}</div>`
   }
-  // hover shows a skill; leaving keeps it for a moment so the camera move doesn't flicker
-  const release = () => { clearTimeout(leaveTimer); leaveTimer = setTimeout(() => focus(null), 1200) }
-  skills.forEach((btn) => {
-    btn.setAttribute('aria-pressed', 'false')
-    btn.addEventListener('pointerenter', (e) => e.pointerType === 'mouse' && focus(btn))
-    btn.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && release())
-    btn.addEventListener('focus', () => focus(btn))
-    btn.addEventListener('blur', () => { if (!coarse) release() })
-    // a tap focuses the button before its click fires, so remember the state from pointerdown
-    let wasOn = false
-    btn.addEventListener('pointerdown', () => { wasOn = btn.classList.contains('is-focus') })
-    btn.addEventListener('click', (e) => {
-      // tap an active skill again to clear it (touch); mouse clicks just (re)select
-      if (e.pointerType && e.pointerType !== 'mouse' && wasOn) { wasOn = false; btn.blur(); focus(null); return }
-      focus(btn)
-    })
-  })
+  skills.forEach((btn) => btn.addEventListener('click', () => select(btn.classList.contains('is-focus') ? null : btn)))
+  detail.addEventListener('click', (e) => { const b = e.target.closest('[data-goto]'); if (b) goTo(b.dataset.goto) })
 
   // Drag to rotate the lattice / globe — follows the pointer, coasts on release
   let dragging = false, lx = 0, ly = 0
@@ -332,13 +325,6 @@ function initInteractions() {
   addEventListener('pointerup', stop)
   addEventListener('pointercancel', stop)
 
-  // Internships: the bead for the role you're reading lights up in the helix
-  const roles = $$('.role')
-  const roleIO = new IntersectionObserver((entries) => {
-    entries.forEach((e) => { if (e.isIntersecting) api?.setActiveRole(roles.indexOf(e.target)) })
-  }, { rootMargin: '-40% 0px -45% 0px' })
-  roles.forEach((r) => roleIO.observe(r))
-
   // Gyroscope tilt on phones (iOS asks permission on the first tap)
   if (coarse && api) {
     const listen = () => addEventListener('deviceorientation', (e) => {
@@ -359,10 +345,13 @@ initPalette([
   { group: 'Navigate', label: 'Chapter 01 · Origin — about me', run: () => goTo('#about'), keywords: 'education cgpa' },
   { group: 'Navigate', label: 'Chapter 02 · Craft — experience', run: () => goTo('#experience'), keywords: 'work internships jobs' },
   { group: 'Navigate', label: 'Chapter 03 · Experiments — projects', run: () => goTo('#projects'), keywords: 'portfolio' },
-  { group: 'Navigate', label: 'Project: stock market prediction', run: () => goTo('[data-shape="3"]'), keywords: 'ml finance' },
-  { group: 'Navigate', label: 'Project: image-to-biomass', run: () => goTo('[data-shape="4"]'), keywords: 'cnn csiro vision' },
-  { group: 'Navigate', label: 'Project: EduSage', run: () => goTo('[data-shape="5"]'), keywords: 'education llm gemini' },
-  { group: 'Navigate', label: 'Previous portfolio — v1 “Universe”', run: () => goTo('.evolution'), keywords: 'old v1 universe solar system history' },
+  { group: 'Navigate', label: 'Internship: ZetaQ', run: () => goTo('[data-shape="3"]'), keywords: 'ai data llm experience' },
+  { group: 'Navigate', label: 'Internship: Thinking Engines', run: () => goTo('[data-shape="4"]'), keywords: 'full stack web experience' },
+  { group: 'Navigate', label: 'Internship: Arms Robotics', run: () => goTo('[data-shape="5"]'), keywords: 'embedded real-time experience' },
+  { group: 'Navigate', label: 'Project: stock market prediction', run: () => goTo('[data-shape="6"]'), keywords: 'ml finance' },
+  { group: 'Navigate', label: 'Project: image-to-biomass', run: () => goTo('[data-shape="7"]'), keywords: 'cnn csiro vision' },
+  { group: 'Navigate', label: 'Project: EduSage', run: () => goTo('[data-shape="8"]'), keywords: 'education llm gemini' },
+  { group: 'Navigate', label: 'Project: Portfolio v1 “Universe”', run: () => goTo('[data-shape="9"]'), keywords: 'old v1 universe solar system history previous' },
   { group: 'Navigate', label: 'Chapter 04 · Toolkit — skills', run: () => goTo('#skills'), keywords: 'tech stack' },
   { group: 'Navigate', label: 'Epilogue — contact', run: () => goTo('#contact'), keywords: 'hire email' },
   { group: 'For recruiters', label: 'Quick view — the 30-second version', run: openQuick, keywords: 'hr summary recruiter tldr' },

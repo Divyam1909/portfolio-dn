@@ -2,17 +2,23 @@ import {
   WebGLRenderer, Scene, PerspectiveCamera, BufferGeometry, BufferAttribute, Float32BufferAttribute,
   ShaderMaterial, Points, LineSegments, Line, Mesh, RingGeometry, CircleGeometry, LineBasicMaterial,
   MeshBasicMaterial, AdditiveBlending, Group, MathUtils, Vector2, Vector3, Color, DoubleSide,
-  LinearSRGBColorSpace, PlaneGeometry,
+  LinearSRGBColorSpace, PlaneGeometry, Vector4,
 } from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
-import { SHAPES, rng, LEAF_BASE, BOOK, LATTICE_NODES, latLon, arcPoint, HOME, GLOBE_R, HELIX, HELIX_BEADS, RING_TILTS } from './shapes.js'
+import {
+  SHAPES, rng, LEAF_BASE, BOOK, LATTICE_NODES, PROJECT_NODES, latLon, arcPoint, HOME, GLOBE_R, HELIX,
+  PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT,
+} from './shapes.js'
 
 const PI = Math.PI
 const DEG = PI / 180
-const JOURNEY = 8 // shapes 0..7 are the journey; shape 8 is the hidden one
+const JOURNEY = SHAPES.length
+// shape indices, in page order
+const S = { HELIX: 2, PIPE: 3, STACK: 4, CHIP: 5, CANDLES: 6, LEAF: 7, BOOK: 8, SOLAR: 9, LATTICE: 10, GLOBE: 11 }
+const tiltFn = (name, r) => `vec3 ${name}(vec3 p){ return rotZ(rotY(rotX(p, ${r[0].toFixed(3)}), ${r[1].toFixed(3)}), ${r[2].toFixed(3)}); }`
 const GLOBE_TILT = HOME.lat * DEG - 0.45 // brings home (Thane) up towards the visible top of the globe
 
 const hex = (h) => {
@@ -55,18 +61,16 @@ vec3 rotY(vec3 p, float a){ float c=cos(a), s=sin(a); return vec3(p.x*c+p.z*s, p
 vec3 rotZ(vec3 p, float a){ float c=cos(a), s=sin(a); return vec3(p.x*c-p.y*s, p.x*s+p.y*c, p.z); }`
 
 const VERT = /* glsl */ `
-attribute vec3 aS0; attribute vec3 aS1; attribute vec3 aS2; attribute vec3 aS3; attribute vec3 aS4;
-attribute vec3 aS5; attribute vec3 aS6; attribute vec3 aS7;
+// Only two shapes are ever on screen at once (the one you're at and the next), so the
+// renderer swaps which shape's buffers are bound to aA/aB as you travel.
+attribute vec3 aA; attribute vec3 aB;
+attribute vec4 aOA; attribute vec4 aOB;
 attribute vec4 aRnd;
-attribute vec4 aOrder;
-attribute vec4 aOrder2;
 
-uniform float uTime, uMorph, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uPulseT, uMouseF, uScale;
-uniform float uIntro, uLive3, uLive4, uLive5, uFocusAmt, uMouseR, uGain, uActiveRole, uFocusGroup, uRelN;
-uniform vec3 uRel[8];
-uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase;
-uniform vec3 uSt[8];
-uniform vec3 uBead[3];
+uniform float uTime, uI0, uI1, uF, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uPulseT, uMouseF, uScale;
+uniform float uIntro, uCandle, uLeaf, uBook, uFocusAmt, uMouseR, uGain, uRelN;
+uniform vec4 uRel[8];
+uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase, uStA, uStB;
 uniform vec2 uTilt;
 
 varying vec3 vColor;
@@ -75,11 +79,6 @@ varying float vAlpha;
 #define PI 3.14159265
 ${NOISE}
 ${ROT}
-
-vec3 shapeAt(int i){
-  if(i==0) return aS0; if(i==1) return aS1; if(i==2) return aS2; if(i==3) return aS3;
-  if(i==4) return aS4; if(i==5) return aS5; if(i==6) return aS6; return aS7;
-}
 
 // Mirrors bookPage() in shapes.js for the right-hand page, turned by angle a around the spine.
 vec3 turnedPage(float u, float v, float a){
@@ -90,94 +89,105 @@ vec3 turnedPage(float u, float v, float a){
   return rotZ(rotY(rotX(p, ${BOOK.ROT[0].toFixed(3)}), ${BOOK.ROT[1].toFixed(3)}), ${BOOK.ROT[2].toFixed(3)});
 }
 
-vec3 helixTilt(vec3 p){ return rotZ(rotY(rotX(p, ${HELIX.ROT[0].toFixed(3)}), ${HELIX.ROT[1].toFixed(3)}), ${HELIX.ROT[2].toFixed(3)}); }
-vec3 ringTilt(vec3 p, int g){
-  ${RING_TILTS.map((r, g) => `if(g==${g}) return rotZ(rotY(rotX(p, ${r[0].toFixed(2)}), ${r[1].toFixed(2)}), ${r[2].toFixed(2)});`).join('\n  ')}
-  return p;
-}
+${tiltFn('helixTilt', HELIX.ROT)}
+${tiltFn('pipeTilt', PIPE_ROT)}
+${tiltFn('stackTilt', STACK_ROT)}
+${tiltFn('chipTilt', CHIP_ROT)}
+${tiltFn('solarTilt', SOLAR_ROT)}
 
-// Per-shape behaviour: spinning, the internship beads, skill rings and the "living" project scenes.
-vec3 living(int i, vec3 p, inout float alpha, inout float glow){
+// Per-shape behaviour: spin, flowing data, live waveforms, orbits and the scroll-driven project scenes.
+// o = that shape's per-particle data (see shapes.js).
+vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
   if(i==0) return rotY(p, uSpin);
-  if(i==2){
-    if(aOrder2.x >= 0.){
-      // data packets flowing along the strands
-      float strand = floor(aOrder2.x * 0.5);
-      float t = fract(aOrder2.x - strand * 2. + uTime * 0.045);
-      float a = t * ${HELIX.TURNS.toFixed(2)} * 6.2831853 + strand * PI;
-      p = helixTilt(vec3(t * ${(2 * HELIX.L).toFixed(3)} - ${HELIX.L.toFixed(3)}, cos(a) * ${(HELIX.R * 1.22).toFixed(3)}, sin(a) * ${(HELIX.R * 1.22).toFixed(3)}));
-      glow += 0.35;
-    }
-    if(aOrder2.y >= 0.){
-      // internship beads: the one you're reading about swells and glows
-      vec3 c = uBead[int(aOrder2.y + 0.5)];
-      float on = 1. - step(0.5, abs(aOrder2.y - uActiveRole));
-      float pulse = 0.5 + 0.5 * sin(uTime * 3.2);
-      p = c + (p - c) * (1. + on * (0.45 + 0.2 * pulse));
-      glow += on * (0.8 + 0.4 * pulse);
-      alpha *= 0.55 + on * 0.6;
+  if(i==${S.HELIX} && o.x >= 0.){
+    // data packets flowing along the strands
+    float strand = floor(o.x * 0.5);
+    float t = fract(o.x - strand * 2. + uTime * 0.045);
+    float a = t * ${HELIX.TURNS.toFixed(2)} * 6.2831853 + strand * PI;
+    glow += 0.35;
+    return helixTilt(vec3(t * ${(2 * HELIX.L).toFixed(3)} - ${HELIX.L.toFixed(3)}, cos(a) * ${(HELIX.R * 1.22).toFixed(3)}, sin(a) * ${(HELIX.R * 1.22).toFixed(3)}));
+  }
+  if(i==${S.PIPE} && o.w > 0.){
+    // ZetaQ: pages stream through the LLM ring and come out as cards
+    float t = fract(o.x + uTime * 0.08);
+    float squeeze = 1. - sin(PI * t) * 0.9;
+    float yOut = mix(0.1, 0.02, t);
+    glow += 0.25 + 0.9 * pow(sin(PI * t), 6.);
+    alpha *= smoothstep(0., 0.06, t) * smoothstep(1., 0.9, t);
+    return pipeTilt(vec3(-1.15 + 2.3 * t, o.y * squeeze + yOut, o.z * squeeze));
+  }
+  if(i==${S.STACK} && o.w > 0.){
+    // Thinking Engines: requests rise from the database through the API to the UI
+    float t = fract(o.x + uTime * 0.14);
+    glow += 0.6;
+    alpha *= smoothstep(0., 0.08, t) * smoothstep(1., 0.88, t);
+    return stackTilt(vec3(o.y, -0.72 + 1.62 * t, o.z));
+  }
+  if(i==${S.CHIP}){
+    // Arms Robotics: pulses run along the traces into a live waveform on the dashboard
+    if(o.y >= 0.) glow += smoothstep(0.1, 0., abs(fract(uTime * 0.55) - o.y)) * 1.6;
+    if(o.x >= 0.){
+      float u = o.x;
+      float y = 0.14 + 0.15 * sin(u * 19. - uTime * 3.2) * (0.55 + 0.45 * sin(u * 4.3 + uTime * 0.9));
+      glow += 0.3 + 0.8 * smoothstep(0.08, 0., abs(u - fract(uTime * 0.55 + 0.1)));
+      return chipTilt(vec3(0.55 + 1.4 * u, y, 0.01));
     }
     return p;
   }
-  if(i==6){
-    if(aOrder2.z >= 0.){
-      // one orbit ring per skill group; the focused group's ring speeds up and lights
-      int g = int(aOrder2.z + 0.5);
-      float on = 1. - step(0.5, abs(aOrder2.z - uFocusGroup));
-      float a = aOrder2.w * 6.2831853 + uTime * (0.22 + aOrder2.z * 0.06 + on * 0.9) * (mod(aOrder2.z, 2.) < 0.5 ? 1. : -1.);
-      float rad = 1.75 + aOrder2.z * 0.12;
-      p = ringTilt(vec3(cos(a) * rad, (aRnd.x - 0.5) * 0.03, sin(a) * rad), g);
-      glow += on * uFocusAmt * 1.2;
-      alpha *= 0.7 + on * uFocusAmt * 0.8;
-    }
-    return rotY(p, uSpin);
-  }
-  if(i==7) return rotX(rotY(p, uSpinG), ${GLOBE_TILT.toFixed(4)});
-  if(i==3){
+  if(i==${S.CANDLES}){
     // candles draw in left → right; the future is still noise
-    float hidden = smoothstep(uLive3 - 0.02, uLive3 + 0.1, aOrder.x);
+    float hidden = smoothstep(uCandle - 0.02, uCandle + 0.1, o.x);
     p += hidden * (vec3(0.35, 0., 0.) + (aRnd.xyz - 0.5) * vec3(0.8, 2.4, 1.4));
     alpha *= 1. - hidden * 0.8;
   }
-  if(i==4){
+  if(i==${S.LEAF}){
     // the leaf grows out of its stem
     vec3 b = uLeafBase;
-    p = b + (p - b) * (0.3 + 0.7 * uLive4);
-    float hidden = smoothstep(uLive4 - 0.04, uLive4 + 0.04, aOrder.y);
+    p = b + (p - b) * (0.3 + 0.7 * uLeaf);
+    float hidden = smoothstep(uLeaf - 0.04, uLeaf + 0.04, o.y);
     p = mix(p, b + (p - b) * 0.08, hidden);
     alpha *= 1. - hidden * 0.85;
   }
-  if(i==5 && aOrder.z >= 0.){
+  if(i==${S.BOOK} && o.z >= 0.){
     // loose pages turn one after another
-    float page = floor(aOrder.z * 0.5);
-    float u = aOrder.z - page * 2.;
-    float t = clamp(uLive5 * 3.4 - page * 1.1, 0., 1.);
-    p = turnedPage(u, aOrder.w, t * t * (3. - 2. * t) * PI);
+    float page = floor(o.z * 0.5);
+    float u = o.z - page * 2.;
+    float t = clamp(uBook * 3.4 - page * 1.1, 0., 1.);
+    p = turnedPage(u, o.w, t * t * (3. - 2. * t) * PI);
   }
+  if(i==${S.SOLAR}){
+    // Portfolio v1: planets orbit a glowing sun
+    if(o.w > 1.5){ p = rotY(p, uTime * 0.25); glow += 0.35; }
+    else if(o.w > 0.){ float a = o.y + uTime * o.z * 0.55; p += vec3(cos(a) * o.x, 0., sin(a) * o.x); glow += 0.15; }
+    return solarTilt(p);
+  }
+  if(i==${S.LATTICE}) return rotY(p, uSpin);
+  if(i==${S.GLOBE}) return rotX(rotY(p, uSpinG), ${GLOBE_TILT.toFixed(4)});
   return p;
 }
 
 void main(){
-  int i0 = int(floor(uMorph));
-  int i1 = min(i0 + 1, 7);
-  float f = uMorph - float(i0);
+  int i0 = int(uI0 + 0.5);
+  int i1 = int(uI1 + 0.5);
+  float f = uF;
   float st = aRnd.y * 0.45;
   float fl = smoothstep(st, st + 0.55, f);
 
   float alA = 1., alB = 1., glA = 0., glB = 0.;
-  vec3 a = living(i0, shapeAt(i0), alA, glA);
-  vec3 b = living(i1, shapeAt(i1), alB, glB);
+  vec3 a = living(i0, aA, aOA, alA, glA);
+  vec3 b = living(i1, aB, aOB, alB, glB);
   vec3 p = mix(a, b, fl);
   float alpha = mix(alA, alB, fl);
   float glow = mix(glA, glB, fl);
   float tr = sin(fl * PI);
 
-  // skills constellation: light up particles around the focused node
-  float w6 = (i0 == 6 ? 1. - fl : 0.) + (i1 == 6 ? fl : 0.);
-  float near = smoothstep(0.42, 0.0, distance(aS6, uFocus));
+  // skills: light the chosen skill and the projects it links to (brighter = stronger skill)
+  float w6 = (i0 == ${S.LATTICE} ? 1. - fl : 0.) + (i1 == ${S.LATTICE} ? fl : 0.);
+  vec3 rawL = i0 == ${S.LATTICE} ? aA : aB;
+  float near = smoothstep(0.42, 0.0, distance(rawL, uFocus));
   for (int k = 0; k < 8; k++) {
     if (float(k) >= uRelN) break;
-    near = max(near, 0.55 * smoothstep(0.3, 0.0, distance(aS6, uRel[k])));
+    near = max(near, (0.25 + 0.25 * uRel[k].w) * smoothstep(0.28, 0.0, distance(rawL, uRel[k].xyz)));
   }
   float focus = w6 * uFocusAmt * near;
 
@@ -193,11 +203,11 @@ void main(){
   p = mix(p, chaos + n * 2., uIntro);
 
   p = rotX(rotY(p, uTilt.y), uTilt.x) * uScale;
-  vec3 station = mix(uSt[i0], uSt[i1], fl);
+  vec3 station = mix(uStA, uStB, fl);
   vec4 wp = vec4(p + station, 1.0);
 
   // globe: fade the far hemisphere so the continents read clearly
-  float w7 = ((i0 == 7 ? 1. - fl : 0.) + (i1 == 7 ? fl : 0.));
+  float w7 = ((i0 == ${S.GLOBE} ? 1. - fl : 0.) + (i1 == ${S.GLOBE} ? fl : 0.));
   float facing = dot(normalize(p), normalize(cameraPosition - wp.xyz));
   alpha *= mix(1., 0.12 + 0.88 * smoothstep(-0.25, 0.3, facing), w7);
 
@@ -331,8 +341,9 @@ void main(){
 }`
 // one colour pair per chapter station
 const FOG_COLORS = [
-  ['#3b5bff', '#c8ff4d'], ['#7a3cff', '#3b5bff'], ['#11b5a0', '#3b5bff'], ['#c8ff4d', '#11b5a0'],
-  ['#3ddc84', '#c8ff4d'], ['#ff9d3c', '#ff4d6d'], ['#8f5bff', '#ff4d6d'], ['#2f7bff', '#11b5a0'],
+  ['#3b5bff', '#c8ff4d'], ['#7a3cff', '#3b5bff'], ['#11b5a0', '#3b5bff'], ['#3b5bff', '#8f5bff'],
+  ['#11b5a0', '#2f7bff'], ['#ff9d3c', '#11b5a0'], ['#c8ff4d', '#11b5a0'], ['#3ddc84', '#c8ff4d'],
+  ['#ff9d3c', '#ff4d6d'], ['#ffb347', '#7a3cff'], ['#8f5bff', '#ff4d6d'], ['#2f7bff', '#11b5a0'],
 ]
 
 const TIERS = [
@@ -366,18 +377,12 @@ export async function createScene(canvas, opts = {}) {
   } catch { /* fall back to system serif */ }
 
   const geo = new BufferGeometry()
-  const order = new Float32Array(MAX * 4).fill(-1)
-  const order2 = new Float32Array(MAX * 4).fill(-1)
+  const NONE = new BufferAttribute(new Float32Array(MAX * 4).fill(-1), 4)
+  const posAttr = [], ordAttr = []
   for (let i = 0; i < SHAPES.length; i++) {
     const s = SHAPES[i](MAX)
-    geo.setAttribute(`aS${i}`, new BufferAttribute(s.pos, 3))
-    // each shape owns different channels of the shared per-particle data
-    const o = s.order
-    if (i === 3) for (let k = 0; k < MAX; k++) order[k * 4] = o[k * 8]
-    if (i === 4) for (let k = 0; k < MAX; k++) order[k * 4 + 1] = o[k * 8 + 1]
-    if (i === 5) for (let k = 0; k < MAX; k++) { order[k * 4 + 2] = o[k * 8 + 2]; order[k * 4 + 3] = o[k * 8 + 3] }
-    if (i === 2) for (let k = 0; k < MAX; k++) { order2[k * 4] = o[k * 8 + 4]; order2[k * 4 + 1] = o[k * 8 + 5] }
-    if (i === 6) for (let k = 0; k < MAX; k++) { order2[k * 4 + 2] = o[k * 8 + 6]; order2[k * 4 + 3] = o[k * 8 + 7] }
+    posAttr.push(new BufferAttribute(s.pos, 3))
+    ordAttr.push(s.order.some((v) => v !== -1) ? new BufferAttribute(s.order, 4) : NONE)
     onProgress?.((i + 1) / SHAPES.length)
     await new Promise((r) => setTimeout(r, 0))
   }
@@ -385,9 +390,13 @@ export async function createScene(canvas, opts = {}) {
   const rnd = new Float32Array(MAX * 4)
   for (let i = 0; i < rnd.length; i++) rnd[i] = r()
   geo.setAttribute('aRnd', new BufferAttribute(rnd, 4))
-  geo.setAttribute('aOrder', new BufferAttribute(order, 4))
-  geo.setAttribute('aOrder2', new BufferAttribute(order2, 4))
-  geo.setAttribute('position', geo.getAttribute('aS0'))
+  geo.setAttribute('position', posAttr[0])
+  let boundA = -1, boundB = -1
+  function bind(i0, i1) {
+    if (i0 !== boundA) { geo.setAttribute('aA', posAttr[i0]); geo.setAttribute('aOA', ordAttr[i0]); boundA = i0 }
+    if (i1 !== boundB) { geo.setAttribute('aB', posAttr[i1]); geo.setAttribute('aOB', ordAttr[i1]); boundB = i1 }
+  }
+  bind(0, 1)
 
   // Stations: each chapter lives at its own point in space; the camera flies between them.
   const D = 18
@@ -395,18 +404,17 @@ export async function createScene(canvas, opts = {}) {
   const flat = Array.from({ length: JOURNEY }, () => new Vector3())
 
   const uniforms = {
-    uTime: { value: 0 }, uMorph: { value: 0 }, uScatter: { value: 0 },
+    uTime: { value: 0 }, uI0: { value: 0 }, uI1: { value: 1 }, uF: { value: 0 }, uScatter: { value: 0 },
     uSize: { value: coarse ? 26 : 21 }, uPR: { value: 1 }, uDim: { value: 1 }, uGain: { value: 1 },
     uSpin: { value: 0 }, uSpinG: { value: 0 }, uScale: { value: 1 },
     uPulseT: { value: 10 }, uPulseO: { value: new Vector3() },
     uMouse: { value: new Vector3(99, 99, 0) }, uMouseF: { value: 0 }, uMouseR: { value: 0.9 },
     uIntro: { value: reducedMQ.matches ? 0 : 1 },
-    uLive3: { value: 1 }, uLive4: { value: 1 }, uLive5: { value: 0 },
-    uFocus: { value: new Vector3() }, uFocusAmt: { value: 0 }, uFocusGroup: { value: -1 },
-    uRel: { value: Array.from({ length: 8 }, () => new Vector3()) }, uRelN: { value: 0 },
-    uActiveRole: { value: 0 }, uBead: { value: HELIX_BEADS.map((b) => new Vector3(...b)) },
+    uCandle: { value: 1 }, uLeaf: { value: 1 }, uBook: { value: 0 },
+    uFocus: { value: new Vector3() }, uFocusAmt: { value: 0 },
+    uRel: { value: Array.from({ length: 8 }, () => new Vector4()) }, uRelN: { value: 0 },
     uLeafBase: { value: new Vector3(...LEAF_BASE) },
-    uSt: { value: stations },
+    uStA: { value: new Vector3() }, uStB: { value: new Vector3() },
     uTilt: { value: new Vector2() },
     uColA: { value: hex('#eceae3') }, uColB: { value: hex(ACCENT) }, uColC: { value: hex('#8fb3ff') },
   }
@@ -480,42 +488,39 @@ export async function createScene(canvas, opts = {}) {
 
   // ---- Rigs: objects that ride along with a shape (same station, scale, tilt and spin)
   const makeRig = (i) => { const outer = new Group(); const inner = new Group(); outer.add(inner); scene.add(outer); return { i, outer, inner } }
-  const latticeRig = makeRig(6)
-  const helixRig = makeRig(2)
-  const beadLocal = HELIX_BEADS.map((b) => new Vector3(...b).add(new Vector3(0, 0.34, 0)))
-  const globeRig = makeRig(7)
+  const latticeRig = makeRig(S.LATTICE)
+  const globeRig = makeRig(S.GLOBE)
 
-  // Skill constellation lines
-  const MAXSEG = 16
-  const cGeo = new BufferGeometry()
-  cGeo.setAttribute('position', new Float32BufferAttribute(new Float32Array(MAXSEG * 6), 3))
-  cGeo.setDrawRange(0, 0)
-  const cMat = new LineBasicMaterial({ color: raw(ACCENT), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false })
-  latticeRig.inner.add(new LineSegments(cGeo, cMat))
+  // Skill → project links. Stronger skills get bright, dense, fast links; weaker ones faint dashes.
   let focusTarget = 0
-  const stopsShape6Near = () => Math.abs(uniforms.uMorph.value - 6) < 0.6
-
-  const BEAM = 26
+  const focusNode = new Vector3()
+  const projLocal = PROJECT_NODES.map((p) => new Vector3(...p))
+  const linked = new Map() // project index → strength (1..3)
+  const BEAM = 40
   const beamGeo = new BufferGeometry()
   beamGeo.setAttribute('position', new Float32BufferAttribute(new Float32Array(8 * BEAM * 3), 3))
-  const beamT = new Float32Array(8 * BEAM)
-  for (let q = 0; q < beamT.length; q++) beamT[q] = (q % BEAM) / (BEAM - 1)
-  beamGeo.setAttribute('aT', new BufferAttribute(beamT, 1))
+  beamGeo.setAttribute('aT', new BufferAttribute(new Float32Array(8 * BEAM), 1))
+  beamGeo.setAttribute('aS', new BufferAttribute(new Float32Array(8 * BEAM), 1))
   beamGeo.setDrawRange(0, 0)
   const beamUni = { uTime: { value: 0 }, uAlpha: { value: 0 }, uPR: { value: 1 } }
   const beams = new Points(beamGeo, new ShaderMaterial({
     uniforms: beamUni, transparent: true, depthWrite: false, blending: AdditiveBlending,
-    vertexShader: `attribute float aT; uniform float uTime, uPR; varying float vA;
-      void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.); gl_Position = projectionMatrix * mv;
-        float dash = fract(aT * 2.5 - uTime * 1.2); vA = smoothstep(0., 0.15, dash) * smoothstep(0.6, 0.2, dash);
-        gl_PointSize = (2.5 + vA * 5.) * uPR * 6. / max(-mv.z, .1); }`,
+    vertexShader: `attribute float aT, aS; uniform float uTime, uPR; varying float vA;
+      void main(){
+        vec4 mv = modelViewMatrix * vec4(position, 1.); gl_Position = projectionMatrix * mv;
+        float s = aS / 3.;                                   // 0.33 familiar … 1 strong
+        float gaps = mix(0.55, 0.0, s);                        // weaker = more broken line
+        float dash = step(gaps, fract(aT * 9.));
+        float pulse = smoothstep(0.1, 0., abs(fract(aT - uTime * (0.25 + 0.5 * s)) - 0.5) - 0.4);
+        vA = dash * (0.3 + 0.7 * s * s) + pulse * s;
+        gl_PointSize = (1.5 + 3.5 * s + pulse * 4.) * uPR * 6. / max(-mv.z, .1);
+      }`,
     fragmentShader: `uniform float uAlpha; varying float vA;
       void main(){ float d = length(gl_PointCoord - .5); if (d > .5) discard;
-        gl_FragColor = vec4(${hex(ACCENT).join(',')}, (1. - d * 2.) * (0.25 + vA) * uAlpha); }`,
+        gl_FragColor = vec4(${hex(ACCENT).join(',')}, (1. - d * 2.) * vA * uAlpha); }`,
   }))
   beams.frustumCulled = false
   latticeRig.inner.add(beams)
-  const focusNode = new Vector3()
 
   // Globe: home pin, pulse ring, visitor pin and the arc between them
   const pinMat = new MeshBasicMaterial({ color: raw(ACCENT), transparent: true, side: DoubleSide, depthWrite: false })
@@ -641,7 +646,8 @@ export async function createScene(canvas, opts = {}) {
 
   function interludeBefore(el) {
     let prev = el.previousElementSibling
-    if (el.matches('.project') && !prev?.matches('.project')) prev = el.parentElement.previousElementSibling
+    // first anchor inside a section (or one that follows the section's plain intro): use the section's interlude
+    if (!prev || (el.matches('.project') && !prev.matches('.project, [data-shape]'))) prev = el.parentElement.previousElementSibling
     return prev?.classList.contains('interlude') ? prev : null
   }
 
@@ -738,8 +744,7 @@ export async function createScene(canvas, opts = {}) {
     const s = stops[i] || stops[0]
     const station = st[i]
     const angle = reduced ? 0 : (p - 0.5) * (mobile ? 0.22 : 0.36)
-    // locating a skill pulls the camera a little closer to the constellation
-    const dolly = (reduced ? 0 : (0.5 - p) * 0.8) - (i === 6 ? uniforms.uFocusAmt.value * 0.7 : 0)
+    const dolly = reduced ? 0 : (0.5 - p) * 0.8
     off.set(-s.x * halfW, -s._y * halfH, 0).applyAxisAngle(Y, angle)
     out.look.copy(station).add(off)
     off.set(-s.x * halfW, -s._y * halfH, 7 + dolly).applyAxisAngle(Y, angle)
@@ -763,17 +768,10 @@ export async function createScene(canvas, opts = {}) {
 
     if (!reduced) time += dt
     if (!dragging) {
-      if (focusTarget && stopsShape6Near()) {
-        // locate: turn the lattice so the chosen skill faces you
-        let want = -Math.atan2(focusNode.x, focusNode.z)
-        want += Math.round((spin - want) / (PI * 2)) * PI * 2
-        spin += (want - spin) * (1 - Math.exp(-dt * 3.5))
-        spinVel = 0
-      } else {
-        if (!reduced) spin += dt * 0.12
-        spin += spinVel * dt
-        gDrag += spinVel * dt
-      }
+      // idle spin slows right down while a skill is selected so its links are easy to read
+      if (!reduced) spin += dt * 0.12 * (1 - uniforms.uFocusAmt.value * 0.85)
+      spin += spinVel * dt
+      gDrag += spinVel * dt
       spinVel *= Math.exp(-dt * 1.6)
       dragTilt *= Math.exp(-dt * 1.2)
     }
@@ -781,7 +779,12 @@ export async function createScene(canvas, opts = {}) {
     const j = MathUtils.clamp(cur.morph, 0, JOURNEY - 1)
     const i0 = Math.floor(j), i1 = Math.min(i0 + 1, JOURNEY - 1), f = j - i0
     const st = reduced ? flat : stations
-    uniforms.uSt.value = st
+    bind(i0, i1)
+    uniforms.uI0.value = i0
+    uniforms.uI1.value = i1
+    uniforms.uF.value = f
+    uniforms.uStA.value.copy(st[i0])
+    uniforms.uStB.value.copy(st[i1])
 
     // per-stop screen offsets (y can be dynamic on phones)
     for (let i = 0; i < stops.length; i++) stops[i]._y = stopY(stops[i], y)
@@ -820,18 +823,17 @@ export async function createScene(canvas, opts = {}) {
     // living scenes follow how far you've read into each project
     const liveK = reduced ? 1 : 1 - Math.exp(-dt * 3)
     const lp = (i) => { const s = stops.findIndex((q) => q.shape === i); return s < 0 ? 1 : hold(s, y) }
-    cur.live3 += ((reduced ? 1 : 0.12 + 0.88 * smooth(0, 0.7, lp(3))) - cur.live3) * liveK
-    cur.live4 += ((reduced ? 1 : 0.06 + 0.94 * smooth(0, 0.7, lp(4))) - cur.live4) * liveK
-    cur.live5 += ((reduced ? 0 : smooth(0.05, 0.9, lp(5))) - cur.live5) * liveK
+    cur.live3 += ((reduced ? 1 : 0.12 + 0.88 * smooth(0, 0.7, lp(S.CANDLES))) - cur.live3) * liveK
+    cur.live4 += ((reduced ? 1 : 0.06 + 0.94 * smooth(0, 0.7, lp(S.LEAF))) - cur.live4) * liveK
+    cur.live5 += ((reduced ? 0 : smooth(0.05, 0.9, lp(S.BOOK))) - cur.live5) * liveK
 
     uniforms.uTime.value = time
     uniforms.uSpin.value = spin
     uniforms.uSpinG.value = -HOME.lon * DEG + Math.sin(time * 0.15) * 0.35 + gDrag
-    uniforms.uMorph.value = j
     uniforms.uDim.value = cur.dim
-    uniforms.uLive3.value = cur.live3
-    uniforms.uLive4.value = cur.live4
-    uniforms.uLive5.value = cur.live5
+    uniforms.uCandle.value = cur.live3
+    uniforms.uLeaf.value = cur.live4
+    uniforms.uBook.value = cur.live5
     const scatterT = reduced ? 0 : Math.min(Math.abs(vel) * 0.00005, 0.16)
     uniforms.uScatter.value += (scatterT - uniforms.uScatter.value) * (1 - Math.exp(-dt * 4))
     screenToWorld(mouse.x, mouse.y, uniforms.uMouse.value)
@@ -858,14 +860,10 @@ export async function createScene(canvas, opts = {}) {
       rig.outer.rotation.set(tilt.x, tilt.y, 0)
     }
     latticeRig.inner.rotation.set(0, spin, 0)
-    helixRig.outer.position.copy(st[2])
-    helixRig.outer.scale.setScalar(scale)
-    helixRig.outer.rotation.set(tilt.x, tilt.y, 0)
     globeRig.inner.rotation.set(GLOBE_TILT, uniforms.uSpinG.value, 0)
 
     uniforms.uFocusAmt.value += (focusTarget - uniforms.uFocusAmt.value) * (1 - Math.exp(-dt * 6))
-    cMat.opacity = uniforms.uFocusAmt.value * rigAlpha(6) * 0.8
-    const ga = rigAlpha(7)
+    const ga = rigAlpha(S.GLOBE)
     const pulse = (time * 0.7) % 1
     pinMat.opacity = ga
     ringMat.opacity = ga * (1 - pulse)
@@ -876,11 +874,12 @@ export async function createScene(canvas, opts = {}) {
 
     labelAt(labels.home, homeN, globeRig, ga)
     labelAt(labels.visitor, visitorN, globeRig, visitor ? ga : 0)
-    labelAt(labels.skill, focusTarget ? focusNode : null, latticeRig, rigAlpha(6) * focusTarget, true)
-    const ha = mobile ? 0 : rigAlpha(2)
-    labels.beads?.forEach((el, b) => labelAt(el, beadLocal[b], helixRig, b === uniforms.uActiveRole.value ? ha : 0, true))
+    const la = rigAlpha(S.LATTICE)
+    labelAt(labels.skill, focusTarget ? focusNode : null, latticeRig, la * focusTarget, true)
+    // phones list the projects in the panel above the chips instead of labelling them in 3D
+    labels.projects?.forEach((el, k) => labelAt(el, !mobile && linked.has(k) ? projLocal[k] : null, latticeRig, la * uniforms.uFocusAmt.value * (0.55 + 0.15 * linked.get(k)), true))
     beamUni.uTime.value = time
-    beamUni.uAlpha.value = uniforms.uFocusAmt.value * rigAlpha(6)
+    beamUni.uAlpha.value = uniforms.uFocusAmt.value * la
 
     dUni.uTime.value = time
     for (const m of fogPlanes) m.material.uniforms.uTime.value = time
@@ -944,45 +943,37 @@ export async function createScene(canvas, opts = {}) {
       if (reducedMQ.matches) { uniforms.uIntro.value = 0; return Promise.resolve() }
       return new Promise((done) => { intro = { t: 0, dur: 2.4, done }; setTimeout(() => { fpsArmed = true }, 3500) })
     },
-    setFocus(nodeIndex, related = [], group = -1) {
-      if (nodeIndex == null) { focusTarget = 0; uniforms.uFocusGroup.value = -1; return }
+    // links: [{ k: project index, s: strength 1..3 }]
+    setFocus(nodeIndex, links = []) {
+      if (nodeIndex == null) { focusTarget = 0; return }
       focusTarget = 1
-      uniforms.uFocusGroup.value = group
-      const rel = related.filter((r) => r !== nodeIndex).slice(0, 8)
-      rel.forEach((r, k) => uniforms.uRel.value[k].set(...LATTICE_NODES[r]))
-      uniforms.uRelN.value = rel.length
-      // dotted beams that flow from the skill to its group-mates
-      const bp = beamGeo.getAttribute('position')
-      rel.forEach((r, k) => {
-        const a = LATTICE_NODES[nodeIndex], b = LATTICE_NODES[r]
-        for (let q = 0; q < BEAM; q++) {
-          const t = q / (BEAM - 1)
-          bp.setXYZ(k * BEAM + q, a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
-        }
-      })
-      bp.needsUpdate = true
-      beamGeo.setDrawRange(0, rel.length * BEAM)
       focusNode.set(...LATTICE_NODES[nodeIndex])
       uniforms.uFocus.value.copy(focusNode)
-      const pos = cGeo.getAttribute('position')
-      let s = 0
-      for (const r of related.slice(0, MAXSEG)) {
-        if (r === nodeIndex) continue
-        pos.setXYZ(s * 2, ...LATTICE_NODES[nodeIndex])
-        pos.setXYZ(s * 2 + 1, ...LATTICE_NODES[r])
-        s++
-      }
-      pos.needsUpdate = true
-      cGeo.setDrawRange(0, s * 2)
+      linked.clear()
+      const list = links.slice(0, 8)
+      list.forEach(({ k, s }, q) => { linked.set(k, s); uniforms.uRel.value[q].set(...PROJECT_NODES[k], s) })
+      uniforms.uRelN.value = list.length
+      const bp = beamGeo.getAttribute('position'), bt = beamGeo.getAttribute('aT'), bs = beamGeo.getAttribute('aS')
+      const a = focusNode
+      list.forEach(({ k, s }, q) => {
+        const b = projLocal[k]
+        for (let m = 0; m < BEAM; m++) {
+          const t = m / (BEAM - 1), lift = Math.sin(t * PI) * 0.25 // a gentle arc
+          bp.setXYZ(q * BEAM + m, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t + lift, a.z + (b.z - a.z) * t)
+          bt.setX(q * BEAM + m, t)
+          bs.setX(q * BEAM + m, s)
+        }
+      })
+      bp.needsUpdate = bt.needsUpdate = bs.needsUpdate = true
+      beamGeo.setDrawRange(0, list.length * BEAM)
     },
     dragStart() { dragging = true; lastDrag = performance.now(); spinVel = 0 },
     drag,
     dragEnd() { dragging = false },
-    setActiveRole(i) { uniforms.uActiveRole.value = i },
     setGyro(x, y) { gyro.on = true; gyro.x = MathUtils.clamp(x, -1, 1); gyro.y = MathUtils.clamp(y, -1, 1) },
     setVisitor,
     get tier() { return tier },
     get settled() { return Math.abs(sample(scrollY).morph - cur.morph) < 0.02 },
-    get debug() { return { focus: uniforms.uFocusAmt.value, focusTarget, morph: uniforms.uMorph.value, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
+    get debug() { return { focus: uniforms.uFocusAmt.value, focusTarget, morph: cur.morph, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
   }
 }
