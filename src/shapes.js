@@ -214,23 +214,33 @@ export function pipeline(n) {
 
 /* Thinking Engines — full stack as three floating layers: UI, API, database.
    Packets rising between layers: order = (phase, laneX, laneZ, 1). */
-export const STACK_ROT = [0.62, 0.62, 0]
+export const STACK_ROT = [0.78, 0.55, 0]
+// Thinking Engines builds football player-performance analytics: the UI layer is a live pitch.
 export function stack(n) {
   const T = (p) => rotate(p, ...STACK_ROT)
   const W = 2.3, Dp = 1.5
   return compose(n, 141, [
-    [34, (i, c, r) => {
-      // top: a browser window laid flat — frame, tab bar, dots, content blocks
-      const y = 0.95, q = r()
-      let x, z
-      if (q < 0.35) { const e = rectEdge(r, W, Dp); x = e[0]; z = e[1] }
-      else if (q < 0.45) { x = (r() - 0.5) * W; z = -Dp / 2 + 0.2 }
-      else if (q < 0.5) { const d = Math.floor(r() * 3); const a = r() * TAU; x = -W / 2 + 0.14 + d * 0.12 + Math.cos(a) * 0.035; z = -Dp / 2 + 0.1 + Math.sin(a) * 0.035 }
-      else if (q < 0.72) { x = -W / 2 + 0.18 + r() * (W - 0.36); z = -Dp / 2 + 0.34 + r() * 0.4 }
-      else { const k = Math.floor(r() * 3); const e = rectEdge(r, 0.6, 0.42); x = -0.72 + k * 0.72 + e[0]; z = 0.38 + e[1] }
-      return T(jitter([x, y, z], r, 0.006))
+    [30, (i, c, r) => {
+      // top: the product itself — a football pitch the players are tracked on
+      const y = 1.1, q = r(), PW = 2.6, PD = 1.6
+      let x, z, yy = y
+      if (q < 0.26) { const e = rectEdge(r, PW, PD); x = e[0]; z = e[1] }
+      else if (q < 0.33) { x = 0; z = (r() - 0.5) * PD }
+      else if (q < 0.43) { const a = r() * TAU; x = Math.cos(a) * 0.28; z = Math.sin(a) * 0.28 }
+      else if (q < 0.63) { const side = r() < 0.5 ? -1 : 1; const e = rectEdge(r, 0.5, 1.0); x = side * (PW / 2 - 0.25) + e[0]; z = e[1]; if (side * x > PW / 2) x = side * PW / 2 }
+      else if (q < 0.73) { const side = r() < 0.5 ? -1 : 1, t = r(); x = side * PW / 2; z = (t - 0.5) * 0.4; yy = y + (r() < 0.5 ? 0.14 : r() * 0.14) } // goal frames
+      else { const band = Math.floor(r() * 10); if (band % 2) { x = -PW / 2 + (band + r()) * (PW / 10); z = (r() - 0.5) * PD } else { x = 0; z = 0 } } // mowing stripes
+      return T(jitter([x, yy, z], r, 0.005))
     }],
-    [22, (i, c, r) => {
+    [12, (i, c, r) => {
+      // players: two teams of five, each a small upright figure; they move in the shader (order = k, baseX, baseZ, 2)
+      const k = i % 10, team = k < 5 ? -1 : 1, slot = k % 5
+      const bx = team * [0.28, 0.62, 0.62, 0.95, 0.32][slot] * (slot === 4 ? -0.3 : 1), bz = [0, -0.5, 0.5, 0, 0.42][slot] * (team < 0 ? 1 : -1)
+      return [gauss(r) * 0.03, r() * 0.18, gauss(r) * 0.03, k, bx, bz, 2]
+    }],
+    [4, (i, c, r) => { const a = r() * TAU; return [Math.cos(a) * 0.14, 0.005, Math.sin(a) * 0.14, 0, -0.3, 0, 3] }],
+    [5, (i, c, r) => [r(), 0, 0, 0, -0.3, 0, 4]],
+    [9, (i, c, r) => {
       // middle: API layer — a plate with a grid of connected endpoints
       const y = 0, q = r()
       if (q < 0.3) { const e = rectEdge(r, W * 0.86, Dp * 0.86); return T(jitter([e[0], y, e[1]], r, 0.006)) }
@@ -240,14 +250,14 @@ export function stack(n) {
       const horiz = r() < 0.5, t = r()
       return T(jitter(horiz && gx < 3 ? [nx + t * 0.5, y, nz] : gz < 2 ? [nx, y, nz + t * 0.4] : [nx, y, nz], r, 0.006))
     }],
-    [26, (i, c, r) => {
+    [12, (i, c, r) => {
       // bottom: database cylinder built from stacked disks
       const R = 0.6, q = r(), a = r() * TAU
       if (q < 0.6) { const k = Math.floor(r() * 3); return T(jitter([Math.cos(a) * R, -1.15 + k * 0.2, Math.sin(a) * R], r, 0.008)) }
       if (q < 0.85) return T(jitter([Math.cos(a) * R, -1.15 + r() * 0.4, Math.sin(a) * R], r, 0.01))
       return T(jitter([Math.cos(a) * R * Math.sqrt(r()), -0.75, Math.sin(a) * R * Math.sqrt(r())], r, 0.005))
     }],
-    [18, (i, c, r) => {
+    [9, (i, c, r) => {
       const laneX = [-0.5, 0, 0.5][i % 3] + gauss(r) * 0.02, laneZ = [0.1, -0.2, 0.25][i % 3] + gauss(r) * 0.02
       return [...T([laneX, 0, laneZ]), r(), laneX, laneZ, 1]
     }],
@@ -340,42 +350,95 @@ export function candles(n) {
 /* 4 — Leaf (biomass estimation). order.y = growth (0 base → 1 tip) */
 const LEAF_LEN = 3.6
 const LEAF_ROT = [-0.45, 0.35, -0.55]
-export const LEAF_BASE = rotate([0, -LEAF_LEN / 2, 0], ...LEAF_ROT)
+// the whole scene (photo → CNN → leaf) is tilted by BIO_ROT; the leaf is shrunk and moved to the right
+export const BIO_ROT = [0.08, -0.32, 0]
+const LEAF_S = 0.55, LEAF_OFF = [1.12, -0.05, 0]
+const leafT = (p) => rotate([p[0] * LEAF_S + LEAF_OFF[0], p[1] * LEAF_S + LEAF_OFF[1], p[2] * LEAF_S + LEAF_OFF[2]], ...BIO_ROT)
+export const LEAF_BASE = leafT(rotate([0, -LEAF_LEN / 2, 0], ...LEAF_ROT))
 export function leaf(n) {
   const len = LEAF_LEN
   const halfW = (t) => Math.pow(Math.sin(Math.PI * Math.pow(t, 0.85)), 1.1) * (1 - 0.25 * t)
   const place = (t, s) => {
     const w = halfW(t)
     const z = 0.28 * s * s - 0.21 * Math.sin(Math.PI * t) + 0.2 * t * t
-    return [...rotate([s * w, t * len - len / 2, z], ...LEAF_ROT), -1, t * 0.85 + Math.abs(s) * 0.15, -1, -1]
+    return [...leafT(rotate([s * w, t * len - len / 2, z], ...LEAF_ROT)), -1, t * 0.85 + Math.abs(s) * 0.15, -1, -1]
   }
+  const B = (p) => rotate(p, ...BIO_ROT)
   return compose(n, 51, [
-    [52, (i, c, r) => place(r(), (r() * 2 - 1) * 0.98)],
-    [14, (i, c, r) => place(r(), r() < 0.5 ? -1 : 1)],
-    [10, (i, c, r) => { const p = place(r(), 0); p[0] += gauss(r) * 0.012; p[2] += gauss(r) * 0.012; return p }],
-    [20, (i, c, r) => {
+    [16, (i, c, r) => {
+      // the input: an aerial photo of a field — frame plus rows of crops as a pixel grid
+      const cx = -1.45, S = 0.95
+      if (r() < 0.3) { const e = rectEdge(r, S, S); return B(jitter([cx + e[0], e[1], 0], r, 0.005)) }
+      for (let t = 0; t < 12; t++) {
+        const gx = Math.floor(r() * 22), gy = Math.floor(r() * 22)
+        const dens = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(gy * 0.9 + Math.sin(gx * 0.4) * 1.5))
+        if (r() < dens) return B([cx - S / 2 + (gx + 0.5) * (S / 22), -S / 2 + (gy + 0.5) * (S / 22), 0])
+      }
+      return B([cx, 0, 0])
+    }],
+    [12, (i, c, r) => {
+      // CNN feature maps, shrinking layer by layer
+      const k = i % 3, cx = [-0.55, -0.12, 0.25][k], S = [0.8, 0.58, 0.38][k], g = [8, 6, 4][k]
+      const q = r()
+      let a, b
+      if (q < 0.45) [a, b] = rectEdge(r, S, S)
+      else { a = -S / 2 + (Math.floor(r() * g) + 0.5) * (S / g); b = -S / 2 + (Math.floor(r() * g) + 0.5) * (S / g) }
+      return B(jitter([cx + a * 0.45, b, a * 0.9], r, 0.006))
+    }],
+    [10, (i, c, r) => [0, 0, 0, r(), (r() - 0.5) * 0.8, (r() - 0.5) * 0.5, 1]], // flow: photo → layers → leaf
+    [34, (i, c, r) => place(r(), (r() * 2 - 1) * 0.98)],
+    [10, (i, c, r) => place(r(), r() < 0.5 ? -1 : 1)],
+    [6, (i, c, r) => { const p = place(r(), 0); p[0] += gauss(r) * 0.008; p[2] += gauss(r) * 0.008; return p }],
+    [10, (i, c, r) => {
       const v = Math.floor(r() * 16)
       const side = v % 2 ? 1 : -1
       const t0 = 0.08 + (Math.floor(v / 2) / 8) * 0.8
       const s = r()
       return place(Math.min(1, t0 + s * 0.16), side * s * 0.95)
     }],
-    [4, (i, c, r) => { const t = -r() * 0.12; return [...rotate([gauss(r) * 0.01, t * len - len / 2, 0], ...LEAF_ROT), -1, 0, -1, -1] }],
+    [2, (i, c, r) => { const t = -r() * 0.12; return [...leafT(rotate([gauss(r) * 0.01, t * len - len / 2, 0], ...LEAF_ROT)), -1, 0, -1, -1] }],
   ])
 }
 
 /* 5 — Open book (education platform). Flipping-page particles carry order.z = page*2 + u, order.w = v.
    The same page() math is mirrored in the vertex shader (see scene.js) to animate the flip. */
-export const BOOK = { H: 1.1, W: 1.35, LIFT: 0.62, ROT: [-0.95, 0.28, 0.08] }
+export const BOOK = { H: 1.1, W: 1.35, LIFT: 0.62, ROT: [-0.95, 0.28, 0.08], S: 0.72, OFF: [0, -0.62, 0.15] }
 function bookPage(u, v, side, layer) {
   const lift = BOOK.LIFT * Math.sin(Math.min(1, u) * Math.PI * 0.62)
   const x = side * (0.03 + u * BOOK.W * (1 - layer * 0.012))
   const z = lift - layer * 0.045 * Math.pow(u, 0.6)
-  return rotate([x, v * BOOK.H, z], ...BOOK.ROT)
+  const q = rotate([x, v * BOOK.H, z], ...BOOK.ROT)
+  return [q[0] * BOOK.S + BOOK.OFF[0], q[1] * BOOK.S + BOOK.OFF[1], q[2] * BOOK.S + BOOK.OFF[2]]
+}
+// the AI reader: a robot head above the book, eyes scanning the right-hand page
+export const ROBOT = { C: [0, 0.72, -0.3], EYES: [[-0.19, 0.76, -0.04], [0.19, 0.76, -0.04]] }
+function robot(i, r) {
+  const [cx, cy, cz] = ROBOT.C, q = r(), W = 0.95, H = 0.66, D = 0.5
+  const NO = [-1, -1, -1, -1]
+  if (q < 0.34) { // head: rounded front/back outline + depth edges
+    const e = rectEdge(r, W, H), front = r() < 0.65
+    return [...jitter([cx + e[0], cy + e[1], cz + (front ? D / 2 : -D / 2)], r, 0.007), ...NO]
+  }
+  if (q < 0.42) { const sx = r() < 0.5 ? -1 : 1, sy = r() < 0.5 ? -1 : 1; return [...jitter([cx + sx * W / 2, cy + sy * H / 2, cz + (r() - 0.5) * D], r, 0.007), ...NO] }
+  if (q < 0.52) { const e = rectEdge(r, W * 0.78, H * 0.62); return [...jitter([cx + e[0], cy + 0.02 + e[1], cz + D / 2 + 0.01], r, 0.005), ...NO] } // face screen
+  if (q < 0.66) { // eyes (order.x = 1, order.w = eye) — blink in the shader
+    const k = r() < 0.5 ? 0 : 1, a = r() * TAU, rr = 0.075 * Math.sqrt(r())
+    const e = ROBOT.EYES[k]
+    return [e[0] + Math.cos(a) * rr, e[1] + Math.sin(a) * rr, e[2], 1, -1, -1, k]
+  }
+  if (q < 0.7) { const t = r(); return [...jitter([cx - 0.12 + 0.24 * t, cy - 0.16, cz + D / 2 + 0.01], r, 0.005), ...NO] } // mouth
+  if (q < 0.76) { const t = r(); return t < 0.8 ? [...jitter([cx, cy + H / 2 + t * 0.26, cz], r, 0.006), ...NO] : [...jitter([cx, cy + H / 2 + 0.3, cz], r, 0.035), 3, -1, -1, -1] } // antenna
+  if (q < 0.82) { const sx = r() < 0.5 ? -1 : 1, a = r() * TAU; return [...jitter([cx + sx * (W / 2 + 0.05), cy + Math.cos(a) * 0.1, cz + Math.sin(a) * 0.1], r, 0.006), ...NO] } // ears
+  if (q < 0.9) { // arms reaching down to hold the book
+    const sx = r() < 0.5 ? -1 : 1, t = r()
+    return [...jitter(lerp3([cx + sx * 0.4, cy - H / 2, cz], bookPage(0.92, 0.78, sx, 0), t), r, 0.01), ...NO]
+  }
+  return [0, 0, 0, 2, r(), -1, i % 2] // scan beams from each eye to the line being read
 }
 export function book(n) {
   return compose(n, 61, [
-    [36, (i, c, r) => bookPage(r(), r() * 2 - 1, r() < 0.5 ? -1 : 1, 0)],
+    [24, (i, c, r) => robot(i, r)],
+    [28, (i, c, r) => bookPage(r(), r() * 2 - 1, r() < 0.5 ? -1 : 1, 0)],
     [18, (i, c, r) => bookPage(r(), r() < 0.5 ? -1 : 1, r() < 0.5 ? -1 : 1, Math.floor(r() * 7))],
     [12, (i, c, r) => bookPage(1, r() * 2 - 1, r() < 0.5 ? -1 : 1, Math.floor(r() * 7))],
     [18, (i, c, r) => {
@@ -483,7 +546,7 @@ export function cart(n) {
   ])
 }
 
-/* Finnfluent — a megaphone sending waves of content out into the world.
+/* Finnfluent (digital finance education) — a megaphone wearing a graduation cap, sending waves and coins out.
    Wave particles: order = (phase, angle, -1, 1); the shader expands them outward. */
 export const MEGA_ROT = [0.12, -0.35, 0.08]
 export function megaphone(n) {
@@ -502,34 +565,81 @@ export function megaphone(n) {
       if (r() < 0.5) { const a = r() * TAU; return T(jitter([x0 - 0.18 + r() * 0.18, Math.cos(a) * 0.1, Math.sin(a) * 0.1], r, 0.006)) }
       const t = r(); return T(jitter(lerp3([x0 + 0.45, -0.3, 0], [x0 + 0.3, -0.75, 0], t), r, 0.02))
     }],
-    [54, (i, c, r) => {
+    [16, (i, c, r) => {
+      // graduation cap resting on the bell: finance *education*
+      const cx = -0.95, top = 0.9, q = r()
+      if (q < 0.6) { // mortarboard (a square rotated 45°), tipped towards the viewer so it reads as a cap
+        const e = r() < 0.6 ? rectEdge(r, 0.8, 0.8) : [(r() - 0.5) * 0.8, (r() - 0.5) * 0.8], a = Math.PI / 4
+        const b = rotate([e[0] * Math.cos(a) - e[1] * Math.sin(a), 0, e[0] * Math.sin(a) + e[1] * Math.cos(a)], 0.7, 0, 0)
+        return T(jitter([cx + b[0], top + b[1], b[2]], r, 0.006))
+      }
+      if (q < 0.85) { const a = r() * TAU; return T(jitter([cx + Math.cos(a) * 0.24, 0.42 + r() * (top - 0.42), Math.sin(a) * 0.24], r, 0.006)) }
+      const t = r(); return T(jitter([cx + 0.56 * t, top - (t > 0.75 ? (t - 0.75) * 1.6 : 0), 0.0], r, 0.008)) // tassel
+    }],
+    [40, (i, c, r) => {
       const ang = (r() * 2 - 1) * 0.75
       return [...T([x1, 0, 0]), (i % 4) / 4 + r() * 0.03, ang, -1, 1]
+    }],
+    [14, (i, c, r) => {
+      // coins carried out on the waves (order = phase, direction, -, 2); p is the coin's local shape
+      const k = i % 7, q = r(), a = r() * TAU, R = 0.11
+      const d = q < 0.6 ? [Math.cos(a) * R, Math.sin(a) * R, 0] : q < 0.85 ? [Math.cos(a) * R * 0.55, Math.sin(a) * R * 0.55, 0] : [(r() - 0.5) * 0.06, (r() - 0.5) * 0.1, 0]
+      return [...d, k / 7, (k / 6 - 0.5) * 1.3, -1, 2]
     }],
   ])
 }
 
-/* Wave Habitat — a live sea surface with sensor buoys pinging the dashboard.
-   Stored flat & untilted; the shader animates the swell and applies WAVE_ROT.
-   Surface: order = (-1, -1, -1, 1). Buoys: (bx, bz, -1, 2). Ping rings: (bx, bz, angle, 3). */
-export const WAVE_ROT = [0.55, -0.35, 0]
-export const BUOYS = [[-0.9, -0.35], [0.35, 0.3], [1.1, -0.45]]
-export function waves(n) {
+/* Wave Habitat — an aquarium with sensors and hardware inside, wired to a control panel.
+   Stored untilted; the shader animates it and applies AQUA_ROT. order.w: 1 water surface,
+   2 plants (x = sway phase), 3 fish (x = index), 4 bubbles (x = phase), 5 cable (x = t), 6 LEDs. */
+export const AQUA_ROT = [0.22, -0.5, 0]
+export const AQUA = { CX: -0.4, W: 2.4, H: 1.6, D: 1.0, WATER: 0.5, STONE: [0.45, -0.66, 0.15] }
+export function aquarium(n) {
+  const { CX, W, H, D, WATER } = AQUA
+  const x0 = CX - W / 2, x1 = CX + W / 2, y0 = -H / 2, y1 = H / 2, z0 = -D / 2, z1 = D / 2
+  const edges = [
+    [[x0, y0, z0], [x1, y0, z0]], [[x0, y1, z0], [x1, y1, z0]], [[x0, y0, z1], [x1, y0, z1]], [[x0, y1, z1], [x1, y1, z1]],
+    [[x0, y0, z0], [x0, y1, z0]], [[x1, y0, z0], [x1, y1, z0]], [[x0, y0, z1], [x0, y1, z1]], [[x1, y0, z1], [x1, y1, z1]],
+    [[x0, y0, z0], [x0, y0, z1]], [[x1, y0, z0], [x1, y0, z1]], [[x0, y1, z0], [x0, y1, z1]], [[x1, y1, z0], [x1, y1, z1]],
+  ]
+  const dev = [x1 - 0.35, y1 + 0.08, z0 + 0.05] // controller clipped to the back rim
+  const panel = [1.55, 0.05, 0]
+  const cableA = [dev[0] + 0.15, dev[1] + 0.05, dev[2]], cableB = [panel[0] - 0.3, panel[1] + 0.42, 0]
+  const cable = (t) => { const p = lerp3(cableA, cableB, t); p[1] += Math.sin(Math.PI * t) * 0.25; return p }
   return compose(n, 191, [
-    [64, (i, c, r) => {
-      // a grid of points reads as a surface
-      const gx = Math.floor(r() * 44), gz = Math.floor(r() * 26)
-      return [-1.7 + (gx / 43) * 3.4 + gauss(r) * 0.01, 0, -1.0 + (gz / 25) * 2.0 + gauss(r) * 0.01, -1, -1, -1, 1]
+    [16, (i, c, r) => { const [a, b] = edges[i % edges.length]; return jitter(lerp3(a, b, r()), r, 0.006) }],
+    [18, (i, c, r) => [x0 + 0.05 + r() * (W - 0.1), WATER, z0 + 0.05 + r() * (D - 0.1), -1, -1, -1, 1]],
+    [10, (i, c, r) => { // gravel
+      const x = x0 + 0.03 + r() * (W - 0.06), z = z0 + 0.03 + r() * (D - 0.06)
+      return [x, y0 + 0.03 + Math.abs(Math.sin(x * 7) * Math.cos(z * 9)) * 0.1 * r(), z]
     }],
-    [16, (i, c, r) => {
-      const b = BUOYS[i % BUOYS.length], q = r()
+    [6, (i, c, r) => { // swaying plants rooted in the gravel
+      const k = i % 5, bx = x0 + 0.3 + k * 0.42, bz = [0.1, -0.25, 0.25, -0.1, 0.2][k], t = r(), h = [0.8, 0.55, 0.95, 0.6, 0.75][k]
+      return [bx + gauss(r) * 0.02, y0 + 0.08 + t * h, bz + gauss(r) * 0.02, k * 1.3, -1, -1, 2]
+    }],
+    [18, (i, c, r) => { // fish: a body and a tail, in local coords; the shader swims them
+      const k = i % 4, q = r(), sc = [1.5, 1.25, 1.1, 1.35][k]
       let d
-      if (q < 0.5) d = [gauss(r) * 0.03, r() * 0.42, gauss(r) * 0.03] // mast
-      else if (q < 0.8) { const a = r() * TAU; d = [Math.cos(a) * 0.1, 0.02 + gauss(r) * 0.01, Math.sin(a) * 0.1] } // float
-      else d = [gauss(r) * 0.035, 0.46 + gauss(r) * 0.035, gauss(r) * 0.035] // beacon
-      return [...d, b[0], b[1], -1, 2]
+      if (q < 0.72) { const a = r() * TAU, rr = Math.sqrt(r()); d = [Math.cos(a) * 0.13 * rr, Math.sin(a) * 0.06 * rr, gauss(r) * 0.012] }
+      else { const t = r(), s2 = (r() * 2 - 1) * t; d = [-0.12 - t * 0.1, s2 * 0.07, 0] }
+      return [d[0] * sc, d[1] * sc, d[2] * sc, k, -1, -1, 3]
     }],
-    [20, (i, c, r) => { const b = BUOYS[i % BUOYS.length]; return [0, 0, 0, b[0], b[1], r() * TAU, 3] }],
+    [8, (i, c, r) => [0, 0, 0, r(), -1, -1, 4]], // bubbles from the air stone
+    [6, (i, c, r) => { // hardware: controller box on the rim + sensor probe into the water + air stone
+      const q = r()
+      if (q < 0.45) { const e = rectEdge(r, 0.36, 0.2); return jitter([dev[0] + e[0], dev[1] + e[1], dev[2]], r, 0.005) }
+      if (q < 0.62) { const t = r(); return jitter([dev[0] - 0.08, dev[1] - 0.1 - t * 0.95, dev[2] + 0.05], r, 0.004) }
+      const a = r() * TAU; return jitter([AQUA.STONE[0] + Math.cos(a) * 0.08, AQUA.STONE[1], AQUA.STONE[2] + Math.sin(a) * 0.05], r, 0.01)
+    }],
+    [3, (i, c, r) => [dev[0] + (i % 2 ? 0.1 : 0.03), dev[1] + 0.02, dev[2] + 0.01, i % 2, -1, -1, 6]], // LEDs
+    [6, (i, c, r) => { const t = r(); return [...jitter(cable(t), r, 0.006), t, -1, -1, 5] }],
+    [9, (i, c, r) => { // control panel: frame, three sliders with knobs, a temperature readout
+      const q = r(), [px, py] = panel
+      if (q < 0.4) { const e = rectEdge(r, 0.62, 0.95); return jitter([px + e[0], py + e[1], 0], r, 0.005) }
+      if (q < 0.75) { const k = Math.floor(r() * 3), y = py + 0.22 - k * 0.2; return jitter([px - 0.2 + r() * 0.4, y, 0], r, 0.004) }
+      if (q < 0.88) { const k = Math.floor(r() * 3), y = py + 0.22 - k * 0.2, kx = px - 0.2 + [0.3, 0.12, 0.26][k]; return jitter([kx, y, 0], r, 0.03) }
+      const t = r(); return jitter([px - 0.2 + t * 0.4, py + 0.36, 0], r, 0.012)
+    }],
   ])
 }
 
@@ -565,13 +675,32 @@ export function latLon(lat, lon, R = GLOBE_R) {
   const a = lat * DEG, b = lon * DEG
   return [Math.cos(a) * Math.sin(b) * R, Math.sin(a) * R, Math.cos(a) * Math.cos(b) * R]
 }
-let landBits = null
-function isLand(lat, lon) {
-  if (!landBits) landBits = Uint8Array.from(atob(LAND_B64), (c) => c.charCodeAt(0))
-  const x = Math.min(LAND_W - 1, Math.floor(((lon + 180) / 360) * LAND_W))
-  const y = Math.min(LAND_H - 1, Math.floor(((90 - lat) / 180) * LAND_H))
+let landBits = null, landCells = null, coastCells = null
+function landAt(x, y) {
+  x = (x + LAND_W) % LAND_W
+  if (y < 0 || y >= LAND_H) return 0
   const i = y * LAND_W + x
   return (landBits[i >> 3] >> (i & 7)) & 1
+}
+function buildLand() {
+  if (landCells) return
+  landBits = Uint8Array.from(atob(LAND_B64), (c) => c.charCodeAt(0))
+  landCells = []; coastCells = []
+  for (let y = 0; y < LAND_H; y++) for (let x = 0; x < LAND_W; x++) {
+    if (!landAt(x, y)) continue
+    landCells.push(y * LAND_W + x)
+    if (!landAt(x - 1, y) || !landAt(x + 1, y) || !landAt(x, y - 1) || !landAt(x, y + 1)) coastCells.push(y * LAND_W + x)
+  }
+}
+// a random point inside a random cell of `cells`, area-weighted (cells near the poles are smaller)
+function sampleCell(cells, r) {
+  for (let tries = 0; tries < 30; tries++) {
+    const id = cells[Math.floor(r() * cells.length)]
+    const cx = id % LAND_W, cy = Math.floor(id / LAND_W)
+    const lat = 90 - ((cy + r()) / LAND_H) * 180, lon = -180 + ((cx + r()) / LAND_W) * 360
+    if (r() < Math.cos(lat * DEG)) return [lat, lon]
+  }
+  return [0, 0]
 }
 const HUBS = [[37.77, -122.42], [40.71, -74.0], [51.5, -0.12], [52.52, 13.4], [1.35, 103.82], [35.68, 139.69], [-33.87, 151.21], [25.2, 55.27], [12.97, 77.59]]
 export function arcPoint(a, b, t, lift = 0.32) {
@@ -580,31 +709,23 @@ export function arcPoint(a, b, t, lift = 0.32) {
   const h = GLOBE_R * (1 + Math.sin(Math.PI * t) * lift)
   return [(x / l) * h, (y / l) * h, (z / l) * h]
 }
+/* Globe from a 0.5° Natural Earth land mask: filled continents, a crisp bright coastline,
+   a faint graticule and arcs from home. order.x: 1 = coast (glows), 2 = graticule (faint). */
 export function globe(n) {
+  buildLand()
   const R = GLOBE_R
   const home = latLon(HOME.lat, HOME.lon, 1)
   const hubs = HUBS.map(([la, lo]) => latLon(la, lo, 1))
   return compose(n, 81, [
-    [64, (i, c, r) => {
-      let lat = 0, lon = 0
-      for (let tries = 0; tries < 40; tries++) {
-        const p = randomOnSphere(r)
-        lat = Math.asin(p[1]) / DEG
-        lon = Math.atan2(p[0], p[2]) / DEG
-        if (isLand(lat, lon)) break
-      }
-      return latLon(lat, lon, R * (1 + gauss(r) * 0.004))
+    [66, (i, c, r) => latLon(...sampleCell(landCells, r), R)],
+    [24, (i, c, r) => [...latLon(...sampleCell(coastCells, r), R * 1.002), 1]],
+    [6, (i, c, r) => {
+      const p = r() < 0.5 ? latLon((Math.floor(r() * 11) - 5) * 15, r() * 360 - 180, R * 0.998) : latLon(r() * 170 - 85, Math.floor(r() * 24) * 15 - 180, R * 0.998)
+      return [...p, 2]
     }],
-    [20, (i, c, r) => {
-      if (r() < 0.5) {
-        const lat = (Math.floor(r() * 7) - 3) * 22.5
-        return latLon(lat, r() * 360 - 180, R * 0.995)
-      }
-      return latLon(r() * 180 - 90, Math.floor(r() * 12) * 30 - 180, R * 0.995)
-    }],
-    [16, (i, c, r) => arcPoint(home, hubs[i % hubs.length], r())],
+    [4, (i, c, r) => arcPoint(home, hubs[i % hubs.length], r())],
   ])
 }
 
 // order matters: it is the order of the chapters on the page
-export const SHAPES = [neuralSphere, monogram, helix, pipeline, stack, chip, cart, megaphone, candles, leaf, book, waves, solar, lattice, globe]
+export const SHAPES = [neuralSphere, monogram, helix, pipeline, stack, chip, cart, megaphone, candles, leaf, book, aquarium, solar, lattice, globe]

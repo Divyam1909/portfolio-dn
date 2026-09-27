@@ -10,7 +10,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import {
   SHAPES, rng, LEAF_BASE, BOOK, LATTICE_NODES, PROJECT_NODES, latLon, arcPoint, HOME, GLOBE_R, HELIX,
-  PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT, CART_ROT, MEGA_ROT, WAVE_ROT,
+  PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT, CART_ROT, MEGA_ROT, AQUA_ROT, AQUA, BIO_ROT, ROBOT,
 } from './shapes.js'
 
 const PI = Math.PI
@@ -19,7 +19,7 @@ const JOURNEY = SHAPES.length
 // shape indices, in page order
 const S = { HELIX: 2, PIPE: 3, STACK: 4, CHIP: 5, CART: 6, MEGA: 7, CANDLES: 8, LEAF: 9, BOOK: 10, WAVES: 11, SOLAR: 12, LATTICE: 13, GLOBE: 14 }
 const tiltFn = (name, r) => `vec3 ${name}(vec3 p){ return rotZ(rotY(rotX(p, ${r[0].toFixed(3)}), ${r[1].toFixed(3)}), ${r[2].toFixed(3)}); }`
-const GLOBE_TILT = HOME.lat * DEG - 0.45 // brings home (Thane) up towards the visible top of the globe
+const GLOBE_TILT = HOME.lat * DEG - 0.12 // brings home (Thane) up towards the visible top of the globe
 
 const hex = (h) => {
   const n = parseInt(h.slice(1), 16)
@@ -86,7 +86,7 @@ vec3 turnedPage(float u, float v, float a){
   float d = 0.03 + u * ${BOOK.W.toFixed(3)};
   a -= sin(a) * 0.35 * u;
   vec3 p = vec3(d * cos(a), v * ${BOOK.H.toFixed(3)}, lift + d * sin(a) * 0.95);
-  return rotZ(rotY(rotX(p, ${BOOK.ROT[0].toFixed(3)}), ${BOOK.ROT[1].toFixed(3)}), ${BOOK.ROT[2].toFixed(3)});
+  return rotZ(rotY(rotX(p, ${BOOK.ROT[0].toFixed(3)}), ${BOOK.ROT[1].toFixed(3)}), ${BOOK.ROT[2].toFixed(3)}) * ${BOOK.S.toFixed(3)} + vec3(${BOOK.OFF.map((v) => v.toFixed(3)).join(',')});
 }
 
 ${tiltFn('helixTilt', HELIX.ROT)}
@@ -96,8 +96,12 @@ ${tiltFn('chipTilt', CHIP_ROT)}
 ${tiltFn('solarTilt', SOLAR_ROT)}
 ${tiltFn('cartTilt', CART_ROT)}
 ${tiltFn('megaTilt', MEGA_ROT)}
-${tiltFn('waveTilt', WAVE_ROT)}
-float swell(vec2 q){ return 0.13 * sin(q.x * 2.6 + uTime * 1.3) + 0.08 * sin(q.y * 3.4 - uTime * 1.1 + q.x) + 0.04 * sin((q.x + q.y) * 6. + uTime * 2.); }
+${tiltFn('aquaTilt', AQUA_ROT)}
+${tiltFn('bioTilt', BIO_ROT)}
+const vec3 EYE0 = vec3(${ROBOT.EYES[0].map((v) => v.toFixed(3)).join(',')});
+const vec3 EYE1 = vec3(${ROBOT.EYES[1].map((v) => v.toFixed(3)).join(',')});
+// a player's drift around their base position on the pitch
+vec2 playerMove(float k, float t){ return vec2(sin(t * 0.55 + k * 1.7) * 0.2 + sin(t * 1.3 + k * 0.9) * 0.06, cos(t * 0.45 + k * 2.3) * 0.13); }
 
 // Per-shape behaviour: spin, flowing data, live waveforms, orbits and the scroll-driven project scenes.
 // o = that shape's per-particle data (see shapes.js).
@@ -120,12 +124,22 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
     alpha *= smoothstep(0., 0.06, t) * smoothstep(1., 0.9, t);
     return pipeTilt(vec3(-1.15 + 2.3 * t, o.y * squeeze + yOut, o.z * squeeze));
   }
+  if(i==${S.STACK} && o.w > 1.5){
+    // Thinking Engines: players move on the pitch; one is tracked (ring + trail), as in their performance analytics
+    float lag = o.w > 3.5 ? p.x : 0.;
+    vec2 c = o.yz + playerMove(o.x, uTime - lag * 2.4);
+    vec3 q;
+    if(o.w > 3.5){ q = vec3(c.x, 0.01, c.y); alpha *= (1. - lag) * 0.9; glow += 0.8 * (1. - lag); }
+    else if(o.w > 2.5){ q = vec3(c.x + p.x, 0.01, c.y + p.z); glow += 0.8 + 0.4 * sin(uTime * 4.); }
+    else { q = vec3(c.x + p.x, p.y, c.y + p.z); glow += o.x < 0.5 ? 1.3 : (o.x < 4.5 ? 0.35 : 0.); }
+    return stackTilt(q + vec3(0., 1.11, 0.));
+  }
   if(i==${S.STACK} && o.w > 0.){
     // Thinking Engines: requests rise from the database through the API to the UI
     float t = fract(o.x + uTime * 0.14);
     glow += 0.6;
     alpha *= smoothstep(0., 0.08, t) * smoothstep(1., 0.88, t);
-    return stackTilt(vec3(o.y, -0.72 + 1.62 * t, o.z));
+    return stackTilt(vec3(o.y, -0.72 + 1.7 * t, o.z));
   }
   if(i==${S.CHIP}){
     // Arms Robotics: pulses run along the traces into a live waveform on the dashboard
@@ -143,6 +157,15 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
     glow += 0.25 + 1.4 * smoothstep(0.1, 0., abs(fract(uTime * 0.35) - o.y));
     return p;
   }
+  if(i==${S.MEGA} && o.w > 1.5){
+    // Finnfluent: coins ride out on the waves, spinning
+    float t = fract(o.x + uTime * 0.2);
+    float rad = 0.3 + t * 1.55;
+    vec3 c = vec3(-0.2 + cos(o.y) * rad, sin(o.y) * rad + t * t * 0.25, 0.);
+    alpha *= (1. - t) * smoothstep(0., 0.08, t);
+    glow += 0.5 + 0.6 * (1. - t);
+    return megaTilt(c + rotY(p, uTime * 2.5 + o.x * 12.));
+  }
   if(i==${S.MEGA} && o.w > 0.){
     // Finnfluent: content waves expand out of the megaphone and fade
     float t = fract(o.x + uTime * 0.28);
@@ -152,22 +175,37 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
     return megaTilt(vec3(-0.2 + cos(o.y) * rad, sin(o.y) * rad, (aRnd.x - 0.5) * 0.06 * rad));
   }
   if(i==${S.WAVES}){
-    // Wave Habitat: live swell, bobbing buoys and sensor pings
-    if(o.w > 2.5){
-      float t = fract(uTime * 0.4 + o.x * 0.37);
-      float rad = 0.08 + t * 0.6;
-      alpha *= 1. - t;
-      glow += 0.9 * (1. - t);
-      vec2 b = o.xy;
-      p = vec3(b.x + cos(o.z) * rad, swell(b + vec2(cos(o.z), sin(o.z)) * rad) + 0.01, b.y + sin(o.z) * rad);
-    } else if(o.w > 1.5){
-      p += vec3(o.x, swell(o.xy), o.y);
-      glow += step(0.4, p.y - swell(o.xy)) * (0.6 + 0.6 * sin(uTime * 5.));
-    } else {
-      p.y = swell(p.xz);
-      alpha *= 0.75;
+    // Wave Habitat: a live aquarium — water, plants, fish, bubbles — wired to its control panel
+    if(o.w > 5.5){ glow += 0.8 + 0.8 * step(0.5, fract(uTime * (o.x > 0.5 ? 1.3 : 0.7))); }
+    else if(o.w > 4.5){ glow += 0.2 + 1.6 * smoothstep(0.12, 0., abs(fract(uTime * 0.6) - o.x)); }
+    else if(o.w > 3.5){
+      float t = fract(o.x + uTime * 0.22);
+      p = vec3(${AQUA.STONE[0].toFixed(2)} + sin(t * 14. + o.x * 40.) * 0.05, ${AQUA.STONE[1].toFixed(2)} + t * ${(AQUA.WATER - AQUA.STONE[1]).toFixed(2)}, ${AQUA.STONE[2].toFixed(2)} + cos(t * 11. + o.x * 30.) * 0.04);
+      alpha *= smoothstep(1., 0.85, t);
+      glow += 0.25;
     }
-    return waveTilt(p);
+    else if(o.w > 2.5){
+      float k = o.x, dir = mod(k, 2.) < 0.5 ? 1. : -1.;
+      float a = uTime * (0.35 + 0.08 * k) * dir + k * 1.9;
+      vec2 R = vec2(${(AQUA.W * 0.32).toFixed(2)} - k * 0.08, ${(AQUA.D * 0.3).toFixed(2)});
+      vec3 c = vec3(${AQUA.CX.toFixed(2)} + cos(a) * R.x, -0.3 + k * 0.17 + sin(a * 1.7) * 0.06, sin(a) * R.y);
+      vec2 d = vec2(-sin(a) * R.x, cos(a) * R.y) * dir;
+      vec3 b = p;
+      b.z += sin(uTime * 9. + k) * 0.04 * max(0., -b.x - 0.08) * 8.;
+      p = c + rotY(b, atan(-d.y, d.x));
+      glow += k < 0.5 ? 0.5 : 0.1;
+    }
+    else if(o.w > 1.5){
+      float h = p.y + ${(AQUA.H / 2).toFixed(2)};
+      p.x += sin(uTime * 1.2 + o.x * 3.) * 0.09 * h * h;
+      p.z += cos(uTime * 0.9 + o.x * 2.) * 0.05 * h * h;
+      glow += 0.1;
+    }
+    else if(o.w > 0.5){
+      p.y += 0.035 * sin(p.x * 5. + uTime * 1.6) + 0.025 * sin(p.z * 7. - uTime * 1.3);
+      alpha *= 0.7;
+    }
+    return aquaTilt(p);
   }
   if(i==${S.CANDLES}){
     // candles draw in left → right; the future is still noise
@@ -175,13 +213,40 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
     p += hidden * (vec3(0.35, 0., 0.) + (aRnd.xyz - 0.5) * vec3(0.8, 2.4, 1.4));
     alpha *= 1. - hidden * 0.8;
   }
-  if(i==${S.LEAF}){
+  if(i==${S.LEAF} && o.w > 0.5){
+    // image → CNN → leaf: pixels stream through the feature maps into the leaf
+    float t = fract(o.x + uTime * 0.12);
+    float sq = 1. - smoothstep(0., 0.65, t) * 0.8;
+    glow += 0.3 + 0.7 * pow(sin(PI * t), 4.);
+    alpha *= smoothstep(0., 0.05, t) * smoothstep(1., 0.88, t);
+    return bioTilt(vec3(mix(-1.0, 0.62, t), o.y * sq, o.z * sq));
+  }
+  if(i==${S.LEAF} && o.y >= 0.){
     // the leaf grows out of its stem
     vec3 b = uLeafBase;
     p = b + (p - b) * (0.3 + 0.7 * uLeaf);
     float hidden = smoothstep(uLeaf - 0.04, uLeaf + 0.04, o.y);
     p = mix(p, b + (p - b) * 0.08, hidden);
     alpha *= 1. - hidden * 0.85;
+  }
+  if(i==${S.BOOK} && o.x > 0.5){
+    // EduSage's AI: the robot blinks, its antenna pulses and its eyes scan the page line by line
+    if(o.x < 1.5){
+      vec3 e = o.w < 0.5 ? EYE0 : EYE1;
+      float blink = step(0.965, fract(uTime * 0.23 + 0.1));
+      p = e + (p - e) * vec3(1., 1. - blink * 0.9, 1.);
+      glow += 1.2;
+    } else if(o.x < 2.5){
+      float s = fract(uTime * 0.32), row = mod(floor(uTime * 0.32), 4.);
+      vec3 target = turnedPage(0.18 + s * 0.68, 0.62 - row * 0.36, 0.);
+      vec3 e = mod(o.w, 2.) < 0.5 ? EYE0 : EYE1;
+      p = mix(e, target, o.y) + (aRnd.xyz - 0.5) * 0.012;
+      alpha *= 0.55;
+      glow += 0.6 + 0.6 * smoothstep(0.15, 0., abs(fract(o.y - uTime * 1.5) - 0.5) - 0.35);
+    } else {
+      glow += 0.6 + 0.6 * sin(uTime * 3.);
+    }
+    return p;
   }
   if(i==${S.BOOK} && o.z >= 0.){
     // loose pages turn one after another
@@ -197,7 +262,11 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
     return solarTilt(p);
   }
   if(i==${S.LATTICE}) return rotY(p, uSpin);
-  if(i==${S.GLOBE}) return rotX(rotY(p, uSpinG), ${GLOBE_TILT.toFixed(4)});
+  if(i==${S.GLOBE}){
+    if(o.x > 1.5) alpha *= 0.3;           // graticule
+    else if(o.x > 0.5) glow += 0.35;      // coastline
+    return rotX(rotY(p, uSpinG), ${GLOBE_TILT.toFixed(4)});
+  }
   return p;
 }
 
