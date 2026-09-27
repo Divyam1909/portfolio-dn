@@ -10,14 +10,14 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import {
   SHAPES, rng, LEAF_BASE, BOOK, LATTICE_NODES, PROJECT_NODES, latLon, arcPoint, HOME, GLOBE_R, HELIX,
-  PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT,
+  PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT, CART_ROT, MEGA_ROT, WAVE_ROT,
 } from './shapes.js'
 
 const PI = Math.PI
 const DEG = PI / 180
 const JOURNEY = SHAPES.length
 // shape indices, in page order
-const S = { HELIX: 2, PIPE: 3, STACK: 4, CHIP: 5, CANDLES: 6, LEAF: 7, BOOK: 8, SOLAR: 9, LATTICE: 10, GLOBE: 11 }
+const S = { HELIX: 2, PIPE: 3, STACK: 4, CHIP: 5, CART: 6, MEGA: 7, CANDLES: 8, LEAF: 9, BOOK: 10, WAVES: 11, SOLAR: 12, LATTICE: 13, GLOBE: 14 }
 const tiltFn = (name, r) => `vec3 ${name}(vec3 p){ return rotZ(rotY(rotX(p, ${r[0].toFixed(3)}), ${r[1].toFixed(3)}), ${r[2].toFixed(3)}); }`
 const GLOBE_TILT = HOME.lat * DEG - 0.45 // brings home (Thane) up towards the visible top of the globe
 
@@ -94,6 +94,10 @@ ${tiltFn('pipeTilt', PIPE_ROT)}
 ${tiltFn('stackTilt', STACK_ROT)}
 ${tiltFn('chipTilt', CHIP_ROT)}
 ${tiltFn('solarTilt', SOLAR_ROT)}
+${tiltFn('cartTilt', CART_ROT)}
+${tiltFn('megaTilt', MEGA_ROT)}
+${tiltFn('waveTilt', WAVE_ROT)}
+float swell(vec2 q){ return 0.13 * sin(q.x * 2.6 + uTime * 1.3) + 0.08 * sin(q.y * 3.4 - uTime * 1.1 + q.x) + 0.04 * sin((q.x + q.y) * 6. + uTime * 2.); }
 
 // Per-shape behaviour: spin, flowing data, live waveforms, orbits and the scroll-driven project scenes.
 // o = that shape's per-particle data (see shapes.js).
@@ -133,6 +137,37 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
       return chipTilt(vec3(0.55 + 1.4 * u, y, 0.01));
     }
     return p;
+  }
+  if(i==${S.CART} && o.y >= 0.){
+    // VanillaKart: a pulse of traffic climbs the growth arrow
+    glow += 0.25 + 1.4 * smoothstep(0.1, 0., abs(fract(uTime * 0.35) - o.y));
+    return p;
+  }
+  if(i==${S.MEGA} && o.w > 0.){
+    // Finnfluent: content waves expand out of the megaphone and fade
+    float t = fract(o.x + uTime * 0.28);
+    float rad = 0.25 + t * 1.75;
+    alpha *= (1. - t) * smoothstep(0., 0.08, t);
+    glow += 0.4 * (1. - t);
+    return megaTilt(vec3(-0.2 + cos(o.y) * rad, sin(o.y) * rad, (aRnd.x - 0.5) * 0.06 * rad));
+  }
+  if(i==${S.WAVES}){
+    // Wave Habitat: live swell, bobbing buoys and sensor pings
+    if(o.w > 2.5){
+      float t = fract(uTime * 0.4 + o.x * 0.37);
+      float rad = 0.08 + t * 0.6;
+      alpha *= 1. - t;
+      glow += 0.9 * (1. - t);
+      vec2 b = o.xy;
+      p = vec3(b.x + cos(o.z) * rad, swell(b + vec2(cos(o.z), sin(o.z)) * rad) + 0.01, b.y + sin(o.z) * rad);
+    } else if(o.w > 1.5){
+      p += vec3(o.x, swell(o.xy), o.y);
+      glow += step(0.4, p.y - swell(o.xy)) * (0.6 + 0.6 * sin(uTime * 5.));
+    } else {
+      p.y = swell(p.xz);
+      alpha *= 0.75;
+    }
+    return waveTilt(p);
   }
   if(i==${S.CANDLES}){
     // candles draw in left → right; the future is still noise
@@ -341,9 +376,10 @@ void main(){
 }`
 // one colour pair per chapter station
 const FOG_COLORS = [
-  ['#3b5bff', '#c8ff4d'], ['#7a3cff', '#3b5bff'], ['#11b5a0', '#3b5bff'], ['#3b5bff', '#8f5bff'],
-  ['#11b5a0', '#2f7bff'], ['#ff9d3c', '#11b5a0'], ['#c8ff4d', '#11b5a0'], ['#3ddc84', '#c8ff4d'],
-  ['#ff9d3c', '#ff4d6d'], ['#ffb347', '#7a3cff'], ['#8f5bff', '#ff4d6d'], ['#2f7bff', '#11b5a0'],
+  ['#3b5bff', '#c8ff4d'], ['#7a3cff', '#3b5bff'], ['#11b5a0', '#3b5bff'], ['#3b5bff', '#8f5bff'], // intro, about, helix, zetaq
+  ['#11b5a0', '#2f7bff'], ['#ff9d3c', '#11b5a0'], ['#ff9d3c', '#c8ff4d'], ['#ff4d6d', '#7a3cff'], // stack, chip, cart, megaphone
+  ['#c8ff4d', '#11b5a0'], ['#3ddc84', '#c8ff4d'], ['#ff9d3c', '#ff4d6d'], ['#2f7bff', '#11b5a0'], // candles, leaf, book, waves
+  ['#ffb347', '#7a3cff'], ['#8f5bff', '#ff4d6d'], ['#2f7bff', '#11b5a0'], // solar, lattice, globe
 ]
 
 const TIERS = [
@@ -471,7 +507,7 @@ export async function createScene(canvas, opts = {}) {
       const u = {
         uTime: { value: 0 }, uSeed: { value: r() * 50 }, uAlpha: { value: (0.1 + r() * 0.06) * (coarse ? 0.65 : 1) },
         uSize: { value: 15 + r() * 12 }, uRot: { value: r() * PI * 2 },
-        uColA: { value: hex(FOG_COLORS[i][k % 2]) }, uColB: { value: hex(FOG_COLORS[i][(k + 1) % 2]) },
+        uColA: { value: hex(FOG_COLORS[i % FOG_COLORS.length][k % 2]) }, uColB: { value: hex(FOG_COLORS[i % FOG_COLORS.length][(k + 1) % 2]) },
       }
       const m = new Mesh(fogGeo, new ShaderMaterial({
         vertexShader: FOG_VERT, fragmentShader: FOG_FRAG, uniforms: u, defines: { OCTAVES: fogOct },

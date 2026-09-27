@@ -403,8 +403,8 @@ for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) for (let k = 0; k < G; k
 }
 // order2: z = skill-group ring (0 Languages, 1 Web, 2 AI/ML, 3 Data & tools), w = angle 0..1
 // Project "stars" orbit the lattice; skills link to them. order.x = project index.
-export const PROJECT_NODES = Array.from({ length: 8 }, (_, k) => {
-  const a = (k / 8) * TAU + 0.2
+export const PROJECT_NODES = Array.from({ length: 10 }, (_, k) => {
+  const a = (k / 10) * TAU + 0.2
   return [Math.cos(a) * 1.72, (k % 2 ? 0.5 : -0.4) + Math.sin(k * 1.7) * 0.2, Math.sin(a) * 1.72]
 })
 export function lattice(n) {
@@ -426,6 +426,110 @@ export function lattice(n) {
       const k = i % PROJECT_NODES.length, p = PROJECT_NODES[k]
       return [...jitter(p, r, 0.055), k]
     }],
+  ])
+}
+
+/* VanillaKart — a shopping cart with organic traffic climbing out of it.
+   Growth-arrow particles: order.y = t along the arrow (a pulse travels up it). */
+export const CART_ROT = [0.18, -0.5, 0]
+export function cart(n) {
+  const T = (p) => rotate(p, ...CART_ROT)
+  const ox = -0.55, oy = -0.35
+  // basket: a trapezoid box, wider at the top
+  const top = 0.45, bot = -0.35, wT = 0.85, wB = 0.62, d = 0.42
+  const corner = (sx, sy, sz) => { const w = sy > 0 ? wT : wB; return [ox + sx * w, oy + (sy > 0 ? top : bot), sz * d] }
+  const edges = []
+  for (const sz of [-1, 1]) {
+    edges.push([corner(-1, 1, sz), corner(1, 1, sz)], [corner(-1, -1, sz), corner(1, -1, sz)], [corner(-1, 1, sz), corner(-1, -1, sz)], [corner(1, 1, sz), corner(1, -1, sz)])
+  }
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) edges.push([corner(sx, sy, -1), corner(sx, sy, 1)])
+  const arrow = [[-1.75, -0.95], [-1.05, -0.45], [-0.55, -0.62], [0.05, 0.05], [0.55, -0.12], [1.3, 0.95]]
+  const segLen = arrow.slice(1).map((q, k) => Math.hypot(q[0] - arrow[k][0], q[1] - arrow[k][1]))
+  const total = segLen.reduce((a, b) => a + b)
+  const along = (t) => {
+    let dd = t * total
+    for (let k = 0; k < segLen.length; k++) { if (dd <= segLen[k] || k === segLen.length - 1) { const f = Math.min(1, dd / segLen[k]); return [arrow[k][0] + (arrow[k + 1][0] - arrow[k][0]) * f, arrow[k][1] + (arrow[k + 1][1] - arrow[k][1]) * f] } dd -= segLen[k] }
+  }
+  return compose(n, 171, [
+    [26, (i, c, r) => { const [a, b] = edges[i % edges.length]; return T(jitter(lerp3(a, b, r()), r, 0.008)) }],
+    [16, (i, c, r) => {
+      // mesh on the front face
+      const q = r(), sz = 1
+      if (q < 0.5) { const k = (Math.floor(r() * 5) + 1) / 6, y = bot + (top - bot) * k, w = wB + (wT - wB) * k; return T(jitter([ox + (r() * 2 - 1) * w, oy + y, sz * d], r, 0.006)) }
+      const k = (Math.floor(r() * 5) + 1) / 6 * 2 - 1, t = r(); const w = wB + (wT - wB) * t
+      return T(jitter([ox + k * w, oy + bot + (top - bot) * t, sz * d], r, 0.006))
+    }],
+    [8, (i, c, r) => {
+      // handle and wheels
+      if (r() < 0.45) { const t = r(); return T(jitter(lerp3([ox - wT, oy + top, 0], [ox - wT - 0.35, oy + top + 0.28, 0], t), r, 0.01)) }
+      const side = r() < 0.5 ? -1 : 1, a = r() * TAU
+      return T(jitter([ox + side * 0.42 + Math.cos(a) * 0.1, oy + bot - 0.2 + Math.sin(a) * 0.1, (r() < 0.5 ? -1 : 1) * d], r, 0.006))
+    }],
+    [30, (i, c, r) => { const t = r(); const [x, y] = along(t); return [...T(jitter([x, y, 0.45], r, 0.012)), -1, t] }],
+    [8, (i, c, r) => {
+      // arrow head
+      const t = r(), side = r() < 0.5 ? -1 : 1
+      const tip = [1.3, 0.95], dir = [0.75, 1.07].map((v) => v / Math.hypot(0.75, 1.07))
+      const back = [tip[0] - dir[0] * 0.32, tip[1] - dir[1] * 0.32]
+      const wing = [back[0] - dir[1] * 0.2 * side, back[1] + dir[0] * 0.2 * side]
+      return [...T(jitter([tip[0] + (wing[0] - tip[0]) * t, tip[1] + (wing[1] - tip[1]) * t, 0.45], r, 0.01)), -1, 1]
+    }],
+    [12, (i, c, r) => {
+      // products tumbling into the basket
+      const k = i % 5, cx = ox - 0.5 + k * 0.25, cy = oy + top + 0.08 + (k % 2) * 0.12
+      const e = rectEdge(r, 0.16, 0.16)
+      return T(jitter([cx + e[0], cy + e[1], (k - 2) * 0.06], r, 0.006))
+    }],
+  ])
+}
+
+/* Finnfluent — a megaphone sending waves of content out into the world.
+   Wave particles: order = (phase, angle, -1, 1); the shader expands them outward. */
+export const MEGA_ROT = [0.12, -0.35, 0.08]
+export function megaphone(n) {
+  const T = (p) => rotate(p, ...MEGA_ROT)
+  const x0 = -1.55, x1 = -0.2, r0 = 0.16, r1 = 0.62
+  return compose(n, 181, [
+    [36, (i, c, r) => {
+      // cone: rings + seams
+      const q = r(), a = r() * TAU
+      if (q < 0.55) { const t = Math.floor(r() * 7) / 6; const rad = r0 + (r1 - r0) * t; return T(jitter([x0 + (x1 - x0) * t, Math.cos(a) * rad, Math.sin(a) * rad], r, 0.008)) }
+      if (q < 0.8) { const s = Math.floor(r() * 10) / 10 * TAU, t = r(); const rad = r0 + (r1 - r0) * t; return T(jitter([x0 + (x1 - x0) * t, Math.cos(s) * rad, Math.sin(s) * rad], r, 0.008)) }
+      return T(jitter([x1, Math.cos(a) * r1, Math.sin(a) * r1], r, 0.012))
+    }],
+    [10, (i, c, r) => {
+      // mouthpiece and handle
+      if (r() < 0.5) { const a = r() * TAU; return T(jitter([x0 - 0.18 + r() * 0.18, Math.cos(a) * 0.1, Math.sin(a) * 0.1], r, 0.006)) }
+      const t = r(); return T(jitter(lerp3([x0 + 0.45, -0.3, 0], [x0 + 0.3, -0.75, 0], t), r, 0.02))
+    }],
+    [54, (i, c, r) => {
+      const ang = (r() * 2 - 1) * 0.75
+      return [...T([x1, 0, 0]), (i % 4) / 4 + r() * 0.03, ang, -1, 1]
+    }],
+  ])
+}
+
+/* Wave Habitat — a live sea surface with sensor buoys pinging the dashboard.
+   Stored flat & untilted; the shader animates the swell and applies WAVE_ROT.
+   Surface: order = (-1, -1, -1, 1). Buoys: (bx, bz, -1, 2). Ping rings: (bx, bz, angle, 3). */
+export const WAVE_ROT = [0.55, -0.35, 0]
+export const BUOYS = [[-0.9, -0.35], [0.35, 0.3], [1.1, -0.45]]
+export function waves(n) {
+  return compose(n, 191, [
+    [64, (i, c, r) => {
+      // a grid of points reads as a surface
+      const gx = Math.floor(r() * 44), gz = Math.floor(r() * 26)
+      return [-1.7 + (gx / 43) * 3.4 + gauss(r) * 0.01, 0, -1.0 + (gz / 25) * 2.0 + gauss(r) * 0.01, -1, -1, -1, 1]
+    }],
+    [16, (i, c, r) => {
+      const b = BUOYS[i % BUOYS.length], q = r()
+      let d
+      if (q < 0.5) d = [gauss(r) * 0.03, r() * 0.42, gauss(r) * 0.03] // mast
+      else if (q < 0.8) { const a = r() * TAU; d = [Math.cos(a) * 0.1, 0.02 + gauss(r) * 0.01, Math.sin(a) * 0.1] } // float
+      else d = [gauss(r) * 0.035, 0.46 + gauss(r) * 0.035, gauss(r) * 0.035] // beacon
+      return [...d, b[0], b[1], -1, 2]
+    }],
+    [20, (i, c, r) => { const b = BUOYS[i % BUOYS.length]; return [0, 0, 0, b[0], b[1], r() * TAU, 3] }],
   ])
 }
 
@@ -503,4 +607,4 @@ export function globe(n) {
 }
 
 // order matters: it is the order of the chapters on the page
-export const SHAPES = [neuralSphere, monogram, helix, pipeline, stack, chip, candles, leaf, book, solar, lattice, globe]
+export const SHAPES = [neuralSphere, monogram, helix, pipeline, stack, chip, cart, megaphone, candles, leaf, book, waves, solar, lattice, globe]

@@ -5,19 +5,21 @@ A single-page portfolio told as an interactive journey. One Three.js particle sy
 | Section | Shape | Interaction |
 | --- | --- | --- |
 | Intro | Neural sphere | Big-bang intro: particles collapse out of chaos |
-| About | "DN" monogram | |
+| About | "DN" monogram | Education, E-Cell leadership and awards |
 | Internships | Double helix | Data packets stream along the strands |
 | ↳ ZetaQ | LLM pipeline | PDF pages stream through an LLM ring and come out as tidy study cards |
 | ↳ Thinking Engines | Full-stack layers | Requests rise from the database, through the API layer, to the UI |
 | ↳ Arms Robotics | Chip → dashboard | Pulses run along PCB traces into a live waveform |
-| Projects | Candlesticks → leaf → book → solar system | Candles draw in, the leaf grows, pages turn as you read; planets orbit for Portfolio v1 |
+| ↳ VanillaKart | Shopping cart + growth arrow | A traffic pulse climbs the SEO growth arrow |
+| ↳ Finnfluent Education | Megaphone | Content waves expand out and fade |
+| Projects | Candlesticks → leaf → book → live sea → solar system | Candles draw in, the leaf grows, pages turn as you read; Wave Habitat's swell and buoys ping live; planets orbit for Portfolio v1 |
 | Skills | Lattice with project stars | Click a skill: links fly to the projects that used it, bright and solid for strong skills, faint and dashed for familiar ones. A panel lists the level and the projects (click one to jump to it). Drag to rotate |
 | Contact | Globe (real continents, ocean sphere, atmosphere) sitting below the text | Pin on Thane, arcs to tech hubs, your approximate location from your time zone; drag to spin |
 
 **Everywhere:** the cursor pushes particles aside, a click or tap sends a shockwave, and phones respond to tilt (gyroscope).
 
 **Extras**
-- **Previous portfolio:** v1 “Universe” is project P/04, a milestone card linking to the old site.
+- **Previous portfolio:** v1 “Universe” is project P/05, a milestone card linking to the old site.
 - **Section sidebar** (desktop): Intro, About, Internships, Projects, Skills, Contact; highlights the current section and jumps on click.
 - **Quick view:** a 30-second recruiter summary in a dialog.
 - **⌘K / Ctrl K** (or `/`): command palette to jump to sections, copy your email, open the résumé, or toggle sound.
