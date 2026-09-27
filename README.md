@@ -4,7 +4,7 @@ A single-page portfolio told as an interactive journey. One Three.js particle sy
 
 | Section | Shape | Interaction |
 | --- | --- | --- |
-| Intro | Neural sphere | Big-bang intro: particles collapse out of chaos |
+| Intro | Seven forms on a loop: golden eagle → rocket → neural sphere → transforming robot → blue whale → tiger → butterfly | Big-bang intro; each form holds ~3.4 s then rearranges into the next, tinted in its own colours with a soft matching aura (gold for the eagle, and so on). Wings flap, the rocket rolls on a live plume, the whale beats its tail and spouts, the tiger swishes its tail. Models live in `src/hero.js` |
 | About | "DN" monogram | Education, E-Cell leadership and awards |
 | Internships | Double helix | Data packets stream along the strands |
 | ↳ ZetaQ | LLM pipeline | PDF pages stream through an LLM ring and come out as tidy study cards |

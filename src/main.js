@@ -4,7 +4,7 @@ import { createAudio } from './audio.js'
 import { guessVisitor } from './visitor.js'
 import { SKILLS, PROJECTS, LEVELS } from './skills.js'
 import {
-  toast, initScramble, initMagnetic, initCursor,
+  toast, scramble, initScramble, initMagnetic, initCursor,
   initQuick, openQuick, initPalette,
 } from './ui.js'
 
@@ -238,6 +238,12 @@ async function boot() {
         onProgress: (p) => (target = 0.15 + p * 0.85),
         labels: { home: $('[data-label-home]'), visitor: $('[data-label-visitor]'), skill: $('[data-label-skill]'), projects: $$('[data-label-proj]') },
         onPulse: (nx) => audio.pluck(nx),
+        onHero: (i, name) => {
+          $('[data-hero-index]').textContent = String(i + 1).padStart(2, '0')
+          const el = $('[data-hero-name]')
+          el.dataset.text = el.textContent = name
+          scramble(el)
+        },
         onFrame: (s) => audio.update(s),
       })
       api.setVisitor(visitor)

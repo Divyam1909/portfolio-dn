@@ -19,11 +19,11 @@ export function rng(seed = 1) {
 const TAU = Math.PI * 2
 const DEG = Math.PI / 180
 
-function gauss(r) {
+export function gauss(r) {
   return Math.sqrt(-2 * Math.log(r() + 1e-9)) * Math.cos(TAU * r())
 }
 
-function randomOnSphere(r) {
+export function randomOnSphere(r) {
   const u = r() * 2 - 1
   const t = r() * TAU
   const s = Math.sqrt(1 - u * u)
@@ -31,7 +31,7 @@ function randomOnSphere(r) {
 }
 
 // parts: [[weight, fn(i, count, r) => [x, y, z, o0?, o1?, o2?, o3?]], ...]
-function compose(n, seed, parts) {
+export function compose(n, seed, parts) {
   const r = rng(seed)
   const pos = new Float32Array(n * 3)
   const order = new Float32Array(n * 4).fill(-1)

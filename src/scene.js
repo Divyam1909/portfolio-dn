@@ -12,6 +12,7 @@ import {
   SHAPES, rng, LEAF_BASE, BOOK, LATTICE_NODES, PROJECT_NODES, latLon, arcPoint, HOME, GLOBE_R, HELIX,
   PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT, CART_ROT, MEGA_ROT, AQUA_ROT, AQUA, BIO_ROT, ROBOT,
 } from './shapes.js'
+import { HERO_SHAPES, HERO_COLORS, HERO_NAMES } from './hero.js'
 
 const PI = Math.PI
 const DEG = PI / 180
@@ -63,13 +64,15 @@ vec3 rotZ(vec3 p, float a){ float c=cos(a), s=sin(a); return vec3(p.x*c-p.y*s, p
 const VERT = /* glsl */ `
 // Only two shapes are ever on screen at once (the one you're at and the next), so the
 // renderer swaps which shape's buffers are bound to aA/aB as you travel.
-attribute vec3 aA; attribute vec3 aB;
-attribute vec4 aOA; attribute vec4 aOB;
+attribute vec3 aA; attribute vec3 aB; attribute vec3 aC;
+attribute vec4 aOA; attribute vec4 aOB; attribute vec4 aOC;
 attribute vec4 aRnd;
 
 uniform float uTime, uI0, uI1, uF, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uPulseT, uMouseF, uScale;
 uniform float uIntro, uCandle, uLeaf, uBook, uFocusAmt, uMouseR, uGain, uRelN;
 uniform vec4 uRel[8];
+uniform float uHA, uHB, uHF;
+uniform vec3 uHP[7], uHS[7];
 uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase, uStA, uStB;
 uniform vec2 uTilt;
 
@@ -270,6 +273,66 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
   return p;
 }
 
+// ---- Intro forms: eagle, rocket, neural sphere, transformer, whale, tiger, butterfly (see hero.js)
+vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
+  float part = o.w;
+  if(part > 7.5 && part < 8.5){ // drifting sparkles
+    p += vec3(sin(uTime * 0.4 + o.y * 20.) * 0.12, sin(uTime * 0.3 + o.y * 13.) * 0.14, 0.);
+    alpha *= 0.3 + 0.7 * abs(sin(uTime * 1.7 + o.y * 30.));
+  }
+  if(h == 0){ // golden eagle: slow wingbeat
+    if(part > 0.5 && part < 1.5){
+      float s = max(abs(p.x) - 0.18, 0.), w = sin(uTime * 1.5);
+      p.z += (s * 0.14 + s * s * 0.2) * w;
+      p.y += s * 0.06 * w;
+    }
+    glow += 0.1;
+    return rotZ(rotY(rotX(p, -0.28), sin(uTime * 0.35) * 0.2), 0.08 + sin(uTime * 0.5) * 0.05) + vec3(0., sin(uTime * 1.5 + 1.2) * 0.05, 0.);
+  }
+  if(h == 1){ // rocket: rolling, with a live plume
+    if(part > 1.5 && part < 2.5){
+      float t = fract(fract(o.y * 13.37) + uTime * 1.7), ang = o.y * 6.2831;
+      float rr = 0.27 * o.z * (1. - t * 0.55) * (0.75 + 0.25 * sin(t * 20. - uTime * 15.));
+      p = vec3(cos(ang) * rr, -1.05 - t * 1.15, sin(ang) * rr);
+      alpha *= (1. - t) * 1.2;
+      glow += 1.4 * (1. - t);
+    }
+    return rotZ(rotY(p, uTime * 0.7), -0.3) + vec3(0., sin(uTime * 1.3) * 0.06, 0.);
+  }
+  if(h == 2) return rotY(p, uSpin);
+  if(h == 3) return rotY(p, -0.5 + sin(uTime * 0.4) * 0.25); // transformer
+  if(h == 4){ // blue whale: the tail beats, the blowhole spouts
+    if(part > 2.5 && part < 3.5) p.y += sin(uTime * 1.4 - o.y * 4.) * 0.2 * pow(1. - o.y, 2.2);
+    if(part > 8.5){
+      float t = fract(o.y + uTime * 0.45), sp = t * 0.35;
+      p += vec3(cos(o.z) * sp, t * 1.0 - t * t * 0.35, sin(o.z) * sp);
+      alpha *= 1. - t; glow += 0.5;
+    }
+    return rotY(p, -0.35) + vec3(0., sin(uTime * 0.8) * 0.06, 0.);
+  }
+  if(h == 5){ // tiger: the tail swishes
+    if(part > 4.5 && part < 5.5){ p.z += sin(uTime * 1.6 + o.y * 2.) * 0.25 * o.y; p.y += sin(uTime * 1.1) * 0.08 * o.y; }
+    return rotY(p, -0.4);
+  }
+  // butterfly: wings flap
+  if(part > 5.5 && part < 6.5){
+    float a = 0.12 + 0.62 * (0.5 + 0.5 * sin(uTime * 3.4));
+    p = vec3(p.x * cos(a), p.y, abs(p.x) * sin(a) + p.z);
+  }
+  return rotX(p, -0.5) + vec3(0., sin(uTime * 1.6) * 0.08, 0.);
+}
+// per-particle colour of a form: 0 primary, 1 secondary, 2 neutral, 3 dark, 4 glowing accent
+vec3 heroTint(int h, float t, inout float alpha, inout float glow){
+  vec3 P = uHP[0], Sx = uHS[0];
+  for(int k = 1; k < 7; k++){ if(k == h){ P = uHP[k]; Sx = uHS[k]; } }
+  if(t < 0.5) return P;
+  if(t < 1.5) return Sx;
+  if(t < 2.5) return mix(vec3(0.93), P, 0.18);
+  if(t < 3.5){ alpha *= 0.75; return P * 0.42 + 0.05; }
+  glow += 0.5;
+  return mix(Sx, vec3(1.), 0.3);
+}
+
 void main(){
   int i0 = int(uI0 + 0.5);
   int i1 = int(uI1 + 0.5);
@@ -278,7 +341,22 @@ void main(){
   float fl = smoothstep(st, st + 0.55, f);
 
   float alA = 1., alB = 1., glA = 0., glB = 0.;
-  vec3 a = living(i0, aA, aOA, alA, glA);
+  vec3 a;
+  vec3 heroCol = vec3(1.);
+  float htr = 0.;
+  if(i0 == 0){
+    // the intro form morphs between two of the seven forms on its own clock
+    int hA = int(uHA + 0.5), hB = int(uHB + 0.5);
+    float hs = aRnd.w * 0.45, hf = smoothstep(hs, hs + 0.55, uHF);
+    float a1 = 1., a2 = 1., g1 = 0., g2 = 0.;
+    vec3 ca = heroTint(hA, aOA.x, a1, g1), cb = heroTint(hB, aOC.x, a2, g2);
+    a = mix(heroAnim(hA, aA, aOA, a1, g1), heroAnim(hB, aC, aOC, a2, g2), hf);
+    alA = mix(a1, a2, hf); glA = mix(g1, g2, hf);
+    heroCol = mix(ca, cb, hf);
+    htr = sin(hf * PI);
+  } else {
+    a = living(i0, aA, aOA, alA, glA);
+  }
   vec3 b = living(i1, aB, aOB, alB, glB);
   vec3 p = mix(a, b, fl);
   float alpha = mix(alA, alB, fl);
@@ -296,6 +374,8 @@ void main(){
   float focus = w6 * uFocusAmt * near;
 
   // mid-flight: particles swirl and scatter, then settle into the next shape
+  float heroW = i0 == 0 ? 1. - fl : 0.;
+  tr = max(tr, htr * heroW * 0.8);
   p = rotY(p, tr * (aRnd.x - 0.5) * 1.6);
   float t = uTime * 0.22;
   vec3 q = p * 0.75 + aRnd.xyz;
@@ -333,8 +413,12 @@ void main(){
   gl_PointSize = min(size, 48. * uPR);
 
   vec3 col = aRnd.w > 0.84 ? uColB : (aRnd.w > 0.78 ? uColC : uColA);
-  vColor = mix(col, uColB, clamp(force * 1.2 + ring + focus + glow, 0., 1.));
+  col = mix(col, heroCol, heroW * 0.92);
+  vec3 hot = mix(uColB, min(heroCol * 1.35 + 0.2, vec3(1.)), heroW);
+  vColor = mix(col, hot, clamp(force * 1.2 + ring + focus + glow * 0.8, 0., 1.));
   float dimOthers = 1. - uFocusAmt * w6 * 0.45 * (1. - focus);
+  // the intro forms are denser than the other shapes; keep them from blowing out
+  alpha *= mix(1., 0.7, heroW);
   vAlpha = uGain * uDim * alpha * dimOthers * (0.35 + 0.55 * aRnd.z) * (1. + force * 0.8 + focus + glow * 0.6)
          * smoothstep(0.3, 2.2, depth);
 }`
@@ -458,7 +542,7 @@ const TIERS = [
 ]
 
 export async function createScene(canvas, opts = {}) {
-  const { onShapeChange, onProgress, onFrame, onPulse, labels = {} } = opts
+  const { onShapeChange, onProgress, onFrame, onPulse, onHero, labels = {} } = opts
   const reducedMQ = matchMedia('(prefers-reduced-motion: reduce)')
   const coarse = matchMedia('(pointer: coarse)').matches
   const cores = navigator.hardwareConcurrency || 4
@@ -496,9 +580,24 @@ export async function createScene(canvas, opts = {}) {
   for (let i = 0; i < rnd.length; i++) rnd[i] = r()
   geo.setAttribute('aRnd', new BufferAttribute(rnd, 4))
   geo.setAttribute('position', posAttr[0])
-  let boundA = -1, boundB = -1
+  // the seven intro forms (bound to aA/aC while the intro is on screen)
+  const heroPos = [], heroOrd = []
+  for (const f of HERO_SHAPES) {
+    const s = f(MAX)
+    heroPos.push(new BufferAttribute(s.pos, 3))
+    heroOrd.push(new BufferAttribute(s.order, 4))
+    await new Promise((r) => setTimeout(r, 0))
+  }
+  const hero = { t: 0, a: 0, b: 1, f: 0, shown: -1 }
+  let boundA = null, boundB = -1, boundC = -1
   function bind(i0, i1) {
-    if (i0 !== boundA) { geo.setAttribute('aA', posAttr[i0]); geo.setAttribute('aOA', ordAttr[i0]); boundA = i0 }
+    const keyA = i0 === 0 ? 'h' + hero.a : i0
+    if (keyA !== boundA) {
+      geo.setAttribute('aA', i0 === 0 ? heroPos[hero.a] : posAttr[i0])
+      geo.setAttribute('aOA', i0 === 0 ? heroOrd[hero.a] : ordAttr[i0])
+      boundA = keyA
+    }
+    if (i0 === 0 && hero.b !== boundC) { geo.setAttribute('aC', heroPos[hero.b]); geo.setAttribute('aOC', heroOrd[hero.b]); boundC = hero.b }
     if (i1 !== boundB) { geo.setAttribute('aB', posAttr[i1]); geo.setAttribute('aOB', ordAttr[i1]); boundB = i1 }
   }
   bind(0, 1)
@@ -509,6 +608,9 @@ export async function createScene(canvas, opts = {}) {
   const flat = Array.from({ length: JOURNEY }, () => new Vector3())
 
   const uniforms = {
+    uHA: { value: 0 }, uHB: { value: 1 }, uHF: { value: 0 },
+    uHP: { value: HERO_COLORS.map((c) => new Vector3(...hex(c[0]))) },
+    uHS: { value: HERO_COLORS.map((c) => new Vector3(...hex(c[1]))) },
     uTime: { value: 0 }, uI0: { value: 0 }, uI1: { value: 1 }, uF: { value: 0 }, uScatter: { value: 0 },
     uSize: { value: coarse ? 26 : 21 }, uPR: { value: 1 }, uDim: { value: 1 }, uGain: { value: 1 },
     uSpin: { value: 0 }, uSpinG: { value: 0 }, uScale: { value: 1 },
@@ -590,6 +692,21 @@ export async function createScene(canvas, opts = {}) {
       fogPlanes.push(m)
     }
   })
+
+  // ---- Soft colour aura behind the intro form (golden for the eagle, and so on)
+  const auraUni = { uCol: { value: new Vector3() }, uAlpha: { value: 0 }, uSize: { value: 6 }, uTime: { value: 0 } }
+  const aura = new Mesh(new PlaneGeometry(1, 1), new ShaderMaterial({
+    uniforms: auraUni, transparent: true, depthWrite: false, depthTest: false, blending: AdditiveBlending,
+    vertexShader: `uniform float uSize; varying vec2 vUv;
+      void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(0., 0., 0., 1.); mv.xy += position.xy * uSize; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uCol; uniform float uAlpha, uTime; varying vec2 vUv;
+      void main(){ float d = length(vUv - 0.5) * 2.; float a = pow(max(0., 1. - d), 2.2) * (0.85 + 0.15 * sin(uTime * 1.3));
+        gl_FragColor = vec4(uCol, a * uAlpha); }`,
+  }))
+  aura.frustumCulled = false
+  aura.renderOrder = -0.8
+  scene.add(aura)
+  const _ca = new Vector3(), _cb = new Vector3()
 
   // ---- Rigs: objects that ride along with a shape (same station, scale, tilt and spin)
   const makeRig = (i) => { const outer = new Group(); const inner = new Group(); outer.add(inner); scene.add(outer); return { i, outer, inner } }
@@ -908,6 +1025,19 @@ export async function createScene(canvas, opts = {}) {
     const j = MathUtils.clamp(cur.morph, 0, JOURNEY - 1)
     const i0 = Math.floor(j), i1 = Math.min(i0 + 1, JOURNEY - 1), f = j - i0
     const st = reduced ? flat : stations
+    // intro forms: hold each one, then morph into the next, on a loop (paused while scrolled away)
+    if (!reduced && !intro && j < 1.5) hero.t += Math.max(0, dt) // rAF time can start slightly behind `prev`
+    const HOLD = 3.4, PERIOD = 5.2
+    const cyc = Math.floor(hero.t / PERIOD), local = hero.t - cyc * PERIOD
+    hero.a = ((cyc % HERO_SHAPES.length) + HERO_SHAPES.length) % HERO_SHAPES.length
+    hero.b = (hero.a + 1) % HERO_SHAPES.length
+    const hx = MathUtils.clamp((local - HOLD) / (PERIOD - HOLD), 0, 1)
+    hero.f = hx * hx * (3 - 2 * hx)
+    uniforms.uHA.value = hero.a
+    uniforms.uHB.value = hero.b
+    uniforms.uHF.value = hero.f
+    const showing = hero.f > 0.5 ? hero.b : hero.a
+    if (showing !== hero.shown) { hero.shown = showing; onHero?.(showing, HERO_NAMES[showing], HERO_SHAPES.length) }
     bind(i0, i1)
     uniforms.uI0.value = i0
     uniforms.uI1.value = i1
@@ -983,6 +1113,11 @@ export async function createScene(canvas, opts = {}) {
 
     // rigs follow their shapes
     const rigAlpha = (i) => Math.max(0, 1 - Math.abs(j - i) * 2)
+    aura.position.copy(st[0])
+    auraUni.uSize.value = 6.2 * scale
+    auraUni.uTime.value = time
+    auraUni.uAlpha.value = rigAlpha(0) * (1 - uniforms.uIntro.value) * (coarse ? 0.3 : 0.24)
+    auraUni.uCol.value.copy(_ca.copy(uniforms.uHP.value[hero.a]).lerp(_cb.copy(uniforms.uHP.value[hero.b]), hero.f))
     for (const rig of [latticeRig, globeRig]) {
       rig.outer.position.copy(st[rig.i])
       rig.outer.scale.setScalar(scale)
@@ -1105,6 +1240,7 @@ export async function createScene(canvas, opts = {}) {
     setGyro(x, y) { gyro.on = true; gyro.x = MathUtils.clamp(x, -1, 1); gyro.y = MathUtils.clamp(y, -1, 1) },
     setVisitor,
     get tier() { return tier },
+    setHero(k) { hero.t = k * 5.2 },
     get settled() { return Math.abs(sample(scrollY).morph - cur.morph) < 0.02 },
     get debug() { return { focus: uniforms.uFocusAmt.value, focusTarget, morph: cur.morph, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
   }
