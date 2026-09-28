@@ -71,7 +71,7 @@ attribute vec4 aRnd;
 uniform float uTime, uI0, uI1, uF, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uPulseT, uMouseF, uScale;
 uniform float uIntro, uCandle, uLeaf, uBook, uFocusAmt, uMouseR, uGain, uRelN;
 uniform vec4 uRel[8];
-uniform float uHA, uHB, uHF;
+uniform float uHA, uHB, uHF, uEntry;
 uniform vec3 uHP[7], uHS[7];
 uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase, uStA, uStB;
 uniform vec2 uTilt;
@@ -273,21 +273,38 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
   return p;
 }
 
-// ---- Intro forms: eagle, rocket, neural sphere, transformer, whale, tiger, butterfly (see hero.js)
+// ---- Intro forms: eagle, rocket, neural sphere, transformer, whale, tiger, butterfly (hero.js, fauna.js)
+vec3 bez(vec3 a, vec3 b, vec3 c, float t){ return mix(mix(a, b, t), mix(b, c, t), t); }
+vec2 rot2(vec2 q, float a){ float c = cos(a), s = sin(a); return vec2(q.x * c - q.y * s, q.x * s + q.y * c); }
+
 vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
   float part = o.w;
   if(part > 7.5 && part < 8.5){ // drifting sparkles
     p += vec3(sin(uTime * 0.4 + o.y * 20.) * 0.12, sin(uTime * 0.3 + o.y * 13.) * 0.14, 0.);
     alpha *= 0.3 + 0.7 * abs(sin(uTime * 1.7 + o.y * 30.));
   }
-  if(h == 0){ // golden eagle: slow wingbeat
+  if(h == 0){ // golden eagle
+    float strong = 1. - smoothstep(0.72, 1., uEntry); // powerful wingbeats while arriving, a glide after
     if(part > 0.5 && part < 1.5){
-      float s = max(abs(p.x) - 0.18, 0.), w = sin(uTime * 1.5);
-      p.z += (s * 0.14 + s * s * 0.2) * w;
-      p.y += s * 0.06 * w;
+      float side = o.z, s = o.y, w = uTime * mix(1.1, 5.2, strong);
+      float th = side * ((0.045 + 0.5 * strong) * sin(w) + (0.035 + 0.32 * strong) * sin(w - 0.9) * smoothstep(0.35, 0.7, s));
+      p.xy = rot2(p.xy - vec2(side * 0.16, 0.06), th) + vec2(side * 0.16, 0.06);
     }
-    glow += 0.1;
-    return rotZ(rotY(rotX(p, -0.28), sin(uTime * 0.35) * 0.2), 0.08 + sin(uTime * 0.5) * 0.05) + vec3(0., sin(uTime * 1.5 + 1.2) * 0.05, 0.);
+    if(part > 10.5 && part < 11.5) p.x += sin(uTime * 0.9) * 0.04 * o.y;
+    vec3 rest = rotZ(rotY(rotX(p, -0.55), 0.35 + sin(uTime * 0.3) * 0.12), 0.2 + sin(uTime * 0.45) * 0.08)
+              + vec3(0., sin(uTime * 1.1) * 0.05, 0.);
+    if(uEntry >= 1.) return rest;
+    // arrival: sweeps in from far behind, banking through a curve, then settles into the glide.
+    // A few particles lag a little behind their neighbours and draw motion streaks.
+    float lag = step(0.7, aRnd.y) * aRnd.z * 0.075;
+    float t = clamp(uEntry * 1.08 - lag, 0., 1.);
+    float et = 1. - pow(1. - t, 2.2);
+    vec3 A = vec3(9., 5.5, -24.), B = vec3(-7.5, 2.2, -2.5), C = vec3(0.);
+    vec3 v = normalize(mix(B - A, C - B, et) + vec3(0., 0., 1e-3));
+    float yaw = atan(v.x, v.z), pitch = -atan(v.y, length(v.xz)), bank = sin(PI * et) * 0.95;
+    vec3 fly = rotY(rotX(rotZ(p, bank), pitch), yaw) + bez(A, B, C, et);
+    glow += lag * 6.;
+    return mix(fly, rest, smoothstep(0.84, 1., t));
   }
   if(h == 1){ // rocket: rolling, with a live plume
     if(part > 1.5 && part < 2.5){
@@ -301,36 +318,51 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
   }
   if(h == 2) return rotY(p, uSpin);
   if(h == 3) return rotY(p, -0.5 + sin(uTime * 0.4) * 0.25); // transformer
-  if(h == 4){ // blue whale: the tail beats, the blowhole spouts
-    if(part > 2.5 && part < 3.5) p.y += sin(uTime * 1.4 - o.y * 4.) * 0.2 * pow(1. - o.y, 2.2);
+  if(h == 4){ // blue whale: the body undulates to the flukes, the blowhole spouts
+    if(part > 2.5 && part < 3.5) p.y += sin(uTime * 1.3 - o.y * 3.6) * 0.2 * pow(1. - o.y, 2.4);
     if(part > 8.5){
-      float t = fract(o.y + uTime * 0.45), sp = t * 0.35;
-      p += vec3(cos(o.z) * sp, t * 1.0 - t * t * 0.35, sin(o.z) * sp);
+      float t = fract(o.y + uTime * 0.45), sp = t * 0.38;
+      p += vec3(cos(o.z) * sp, t * 1.05 - t * t * 0.35, sin(o.z) * sp);
       alpha *= 1. - t; glow += 0.5;
     }
-    return rotY(p, -0.35) + vec3(0., sin(uTime * 0.8) * 0.06, 0.);
+    return rotZ(rotY(rotX(p, 0.18), -0.55 + sin(uTime * 0.2) * 0.1), 0.04) + vec3(0., sin(uTime * 0.8) * 0.06, 0.);
   }
-  if(h == 5){ // tiger: the tail swishes
-    if(part > 4.5 && part < 5.5){ p.z += sin(uTime * 1.6 + o.y * 2.) * 0.25 * o.y; p.y += sin(uTime * 1.1) * 0.08 * o.y; }
-    return rotY(p, -0.4);
+  if(h == 5){ // tiger: a slow walk (diagonal legs in step), swishing tail
+    float w = uTime * 2.1;
+    if(part > 11.5){
+      float li = part - 12.;
+      float ph = (li < 0.5 || li > 2.5) ? 0. : PI;
+      float lift = max(0., sin(w + ph + 1.2)) * 0.05; // paws lift on the forward swing
+      p.xy = rot2(p.xy - o.yz, 0.26 * sin(w + ph)) + o.yz;
+      p.y += lift * smoothstep(-0.2, -0.8, p.y);
+    }
+    if(part > 4.5 && part < 5.5){ p.z += sin(uTime * 1.6 + o.y * 2.) * 0.22 * o.y; p.y += sin(uTime * 1.1) * 0.06 * o.y; }
+    p.y += sin(w * 2.) * 0.012;
+    return rotY(rotX(p, 0.12), -0.45 + sin(uTime * 0.25) * 0.1);
   }
   // butterfly: wings flap
   if(part > 5.5 && part < 6.5){
     float a = 0.12 + 0.62 * (0.5 + 0.5 * sin(uTime * 3.4));
     p = vec3(p.x * cos(a), p.y, abs(p.x) * sin(a) + p.z);
   }
-  return rotX(p, -0.5) + vec3(0., sin(uTime * 1.6) * 0.08, 0.);
+  return rotX(p, -0.4) + vec3(0., sin(uTime * 1.6) * 0.08, 0.);
 }
-// per-particle colour of a form: 0 primary, 1 secondary, 2 neutral, 3 dark, 4 glowing accent
-vec3 heroTint(int h, float t, inout float alpha, inout float glow){
+// Colour of a particle: integer part = tint (0 primary, 1 secondary, 2 neutral, 3 dark, 4 glowing
+// accent, 5 black); fractional part = baked lighting (0 means unlit).
+vec3 heroTint(int h, float raw, inout float alpha, inout float glow){
   vec3 P = uHP[0], Sx = uHS[0];
   for(int k = 1; k < 7; k++){ if(k == h){ P = uHP[k]; Sx = uHS[k]; } }
-  if(t < 0.5) return P;
-  if(t < 1.5) return Sx;
-  if(t < 2.5) return mix(vec3(0.93), P, 0.18);
-  if(t < 3.5){ alpha *= 0.75; return P * 0.42 + 0.05; }
-  glow += 0.5;
-  return mix(Sx, vec3(1.), 0.3);
+  float t = floor(raw + 0.001), sh = raw - t;
+  if(sh < 0.001) sh = 1.;
+  vec3 c;
+  if(t < 0.5) c = P;
+  else if(t < 1.5) c = Sx;
+  else if(t < 2.5) c = mix(vec3(0.93), P, 0.18);
+  else if(t < 3.5){ alpha *= 0.8; c = P * 0.42 + 0.04; }
+  else if(t < 4.5){ glow += 0.5; c = mix(Sx, vec3(1.), 0.3); }
+  else { alpha *= 0.3; c = P * 0.08; }
+  alpha *= mix(0.45, 1., sh);
+  return c * mix(0.22, 1.18, sh);
 }
 
 void main(){
@@ -608,7 +640,7 @@ export async function createScene(canvas, opts = {}) {
   const flat = Array.from({ length: JOURNEY }, () => new Vector3())
 
   const uniforms = {
-    uHA: { value: 0 }, uHB: { value: 1 }, uHF: { value: 0 },
+    uHA: { value: 0 }, uHB: { value: 1 }, uHF: { value: 0 }, uEntry: { value: reducedMQ.matches ? 1 : 0 },
     uHP: { value: HERO_COLORS.map((c) => new Vector3(...hex(c[0]))) },
     uHS: { value: HERO_COLORS.map((c) => new Vector3(...hex(c[1]))) },
     uTime: { value: 0 }, uI0: { value: 0 }, uI1: { value: 1 }, uF: { value: 0 }, uScatter: { value: 0 },
@@ -616,7 +648,7 @@ export async function createScene(canvas, opts = {}) {
     uSpin: { value: 0 }, uSpinG: { value: 0 }, uScale: { value: 1 },
     uPulseT: { value: 10 }, uPulseO: { value: new Vector3() },
     uMouse: { value: new Vector3(99, 99, 0) }, uMouseF: { value: 0 }, uMouseR: { value: 0.9 },
-    uIntro: { value: reducedMQ.matches ? 0 : 1 },
+    uIntro: { value: 0 }, // the old big-bang intro is replaced by the eagle's arrival (uEntry)
     uCandle: { value: 1 }, uLeaf: { value: 1 }, uBook: { value: 0 },
     uFocus: { value: new Vector3() }, uFocusAmt: { value: 0 },
     uRel: { value: Array.from({ length: 8 }, () => new Vector4()) }, uRelN: { value: 0 },
@@ -1100,11 +1132,11 @@ export async function createScene(canvas, opts = {}) {
     uniforms.uMouseF.value += (mf - uniforms.uMouseF.value) * (1 - Math.exp(-dt * 4))
     if (!reduced) uniforms.uPulseT.value += dt
 
-    // intro (big bang)
+    // intro: the eagle sweeps in (the shader eases uEntry along its flight path)
     if (intro) {
-      intro.t += dt
+      intro.t += Math.max(0, dt)
       const x = Math.min(1, intro.t / intro.dur)
-      uniforms.uIntro.value = 1 - (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
+      uniforms.uEntry.value = x
       if (x >= 1) {
         uniforms.uPulseO.value.copy(st[0]); uniforms.uPulseT.value = 0
         const done = intro.done; intro = null; done()
@@ -1116,7 +1148,7 @@ export async function createScene(canvas, opts = {}) {
     aura.position.copy(st[0])
     auraUni.uSize.value = 6.2 * scale
     auraUni.uTime.value = time
-    auraUni.uAlpha.value = rigAlpha(0) * (1 - uniforms.uIntro.value) * (coarse ? 0.3 : 0.24)
+    auraUni.uAlpha.value = rigAlpha(0) * Math.pow(uniforms.uEntry.value, 3) * (coarse ? 0.3 : 0.24)
     auraUni.uCol.value.copy(_ca.copy(uniforms.uHP.value[hero.a]).lerp(_cb.copy(uniforms.uHP.value[hero.b]), hero.f))
     for (const rig of [latticeRig, globeRig]) {
       rig.outer.position.copy(st[rig.i])
@@ -1207,8 +1239,8 @@ export async function createScene(canvas, opts = {}) {
   return {
     layout,
     playIntro() {
-      if (reducedMQ.matches) { uniforms.uIntro.value = 0; return Promise.resolve() }
-      return new Promise((done) => { intro = { t: 0, dur: 2.4, done }; setTimeout(() => { fpsArmed = true }, 3500) })
+      if (reducedMQ.matches) { uniforms.uEntry.value = 1; return Promise.resolve() }
+      return new Promise((done) => { intro = { t: 0, dur: 3.4, done }; setTimeout(() => { fpsArmed = true }, 4500) })
     },
     // links: [{ k: project index, s: strength 1..3 }]
     setFocus(nodeIndex, links = []) {
@@ -1241,6 +1273,7 @@ export async function createScene(canvas, opts = {}) {
     setVisitor,
     get tier() { return tier },
     setHero(k) { hero.t = k * 5.2 },
+    setEntry(v) { uniforms.uEntry.value = v },
     get settled() { return Math.abs(sample(scrollY).morph - cur.morph) < 0.02 },
     get debug() { return { focus: uniforms.uFocusAmt.value, focusTarget, morph: cur.morph, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
   }

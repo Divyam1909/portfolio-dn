@@ -4,7 +4,7 @@ A single-page portfolio told as an interactive journey. One Three.js particle sy
 
 | Section | Shape | Interaction |
 | --- | --- | --- |
-| Intro | Seven forms on a loop: golden eagle → rocket → neural sphere → transforming robot → blue whale → tiger → butterfly | Big-bang intro; each form holds ~3.4 s then rearranges into the next, tinted in its own colours with a soft matching aura (gold for the eagle, and so on). Wings flap, the rocket rolls on a live plume, the whale beats its tail and spouts, the tiger swishes its tail. Models live in `src/hero.js` |
+| Intro | Seven forms on a loop: golden eagle → rocket → neural sphere → transforming robot → blue whale → tiger → butterfly | The golden eagle sweeps in from deep space, banking through a curve with powerful wingbeats and motion streaks, then settles into a glide. Each form holds ~3.4 s then rearranges into the next, tinted in its own colours with a soft matching aura. The animals are sculpted from signed-distance fields with feathers, stripes and baked lighting (`src/fauna.js`): the tiger walks with its diagonal legs in step, the whale undulates and spouts, the morpho's wings flap. Other forms live in `src/hero.js` |
 | About | "DN" monogram | Education, E-Cell leadership and awards |
 | Internships | Double helix | Data packets stream along the strands |
 | ↳ ZetaQ | LLM pipeline | PDF pages stream through an LLM ring and come out as tidy study cards |
