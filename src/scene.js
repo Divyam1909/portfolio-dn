@@ -12,7 +12,9 @@ import {
   SHAPES, rng, LEAF_BASE, BOOK, LATTICE_NODES, PROJECT_NODES, latLon, arcPoint, HOME, GLOBE_R, HELIX,
   PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT, CART_ROT, MEGA_ROT, AQUA_ROT, AQUA, BIO_ROT, ROBOT,
 } from './shapes.js'
-import { HERO_SHAPES, HERO_COLORS, HERO_NAMES } from './hero.js'
+import { HERO_SHAPES, HERO_COLORS, HERO_NAMES, HERO_SEQUENCE } from './hero.js'
+import { CHEETAH_LEGS, CHEETAH_X } from './mammals.js'
+import { HEART_CENTRES } from './heart.js'
 
 const PI = Math.PI
 const DEG = PI / 180
@@ -72,7 +74,7 @@ uniform float uTime, uI0, uI1, uF, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uP
 uniform float uIntro, uCandle, uLeaf, uBook, uFocusAmt, uMouseR, uGain, uRelN;
 uniform vec4 uRel[8];
 uniform float uHA, uHB, uHF, uEntry;
-uniform vec3 uHP[7], uHS[7];
+uniform vec3 uHP[${HERO_SHAPES.length}], uHS[${HERO_SHAPES.length}];
 uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase, uStA, uStB;
 uniform vec2 uTilt;
 
@@ -276,6 +278,12 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
 // ---- Intro forms: eagle, rocket, neural sphere, transformer, whale, tiger, butterfly (hero.js, fauna.js)
 vec3 bez(vec3 a, vec3 b, vec3 c, float t){ return mix(mix(a, b, t), mix(b, c, t), t); }
 vec2 rot2(vec2 q, float a){ float c = cos(a), s = sin(a); return vec2(q.x * c - q.y * s, q.x * s + q.y * c); }
+vec2 cheetahPivot(int i){ // shoulder/hip of each cheetah leg
+  ${CHEETAH_LEGS.map(([j], i) => `if(i == ${i}) return vec2(${(j[0][0] - CHEETAH_X).toFixed(3)}, ${j[0][1].toFixed(3)});`).join('\n  ')}
+  return vec2(0.);
+}
+const vec3 HEART_V = vec3(${HEART_CENTRES.ventricles.map((v) => v.toFixed(3)).join(', ')});
+const vec3 HEART_A = vec3(${HEART_CENTRES.atria.map((v) => v.toFixed(3)).join(', ')});
 
 vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
   float part = o.w;
@@ -327,18 +335,60 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
     }
     return rotZ(rotY(rotX(p, 0.18), -0.55 + sin(uTime * 0.2) * 0.1), 0.04) + vec3(0., sin(uTime * 0.8) * 0.06, 0.);
   }
-  if(h == 5){ // tiger: a slow walk (diagonal legs in step), swishing tail
-    float w = uTime * 2.1;
-    if(part > 11.5){
+  if(h == 5 || h == 7){ // tiger, red fox: a slow walk (diagonal legs in step), swishing tail
+    float w = uTime * (h == 5 ? 2.1 : 2.5);
+    if(part > 11.5 && part < 15.5){
       float li = part - 12.;
       float ph = (li < 0.5 || li > 2.5) ? 0. : PI;
       float lift = max(0., sin(w + ph + 1.2)) * 0.05; // paws lift on the forward swing
-      p.xy = rot2(p.xy - o.yz, 0.26 * sin(w + ph)) + o.yz;
+      p.xy = rot2(p.xy - o.yz, (h == 5 ? 0.26 : 0.3) * sin(w + ph)) + o.yz;
       p.y += lift * smoothstep(-0.2, -0.8, p.y);
     }
-    if(part > 4.5 && part < 5.5){ p.z += sin(uTime * 1.6 + o.y * 2.) * 0.22 * o.y; p.y += sin(uTime * 1.1) * 0.06 * o.y; }
+    if(part > 4.5 && part < 5.5){
+      if(h == 5){ p.z += sin(uTime * 1.6 + o.y * 2.) * 0.22 * o.y; p.y += sin(uTime * 1.1) * 0.06 * o.y; }
+      else { p.z += sin(uTime * 1.2 + o.y * 1.6) * 0.14 * o.y; p.y += sin(uTime * 0.9) * 0.05 * o.y; }
+    }
     p.y += sin(w * 2.) * 0.012;
-    return rotY(rotX(p, 0.12), -0.45 + sin(uTime * 0.25) * 0.1);
+    return h == 5 ? rotY(rotX(p, 0.12), -0.45 + sin(uTime * 0.25) * 0.1) : rotY(rotX(p, 0.1), -0.5 + sin(uTime * 0.25) * 0.12);
+  }
+  if(h == 8){ // cheetah: a slow-motion rotary gallop; each leg swings from the shoulder/hip and folds at the knee
+    float s = uTime * 4.2;
+    if(part > 11.5 && part < 19.5){
+      float li = mod(part - 12., 4.);
+      float rear = step(1.5, li);
+      float ph = rear * PI + (mod(li, 2.) > 0.5 ? 0.45 : 0.);
+      float th = mix(0.62, 0.55, rear) * sin(s + ph);
+      if(part > 15.5) p.xy = rot2(p.xy - o.yz, -1.05 * max(0., cos(s + ph))) + o.yz; // tuck during the forward swing
+      vec2 pv = cheetahPivot(int(li + 0.5));
+      p.xy = rot2(p.xy - pv, th) + pv;
+    }
+    if(part > 4.5 && part < 5.5){ p.y += sin(s + 1.2) * 0.1 * o.y * o.y; p.z += sin(uTime * 0.9) * 0.08 * o.y; }
+    if(part > 20.5 && part < 21.5){ // dust kicked back from the paws
+      float t = fract(o.y + uTime * 0.8);
+      p = vec3(0.7 - t * 2.8, -0.98 + t * (0.1 + o.z * 0.25) - t * t * 0.1, p.z * (1. + t));
+      alpha *= sin(PI * t) * 0.7;
+    }
+    p.y += sin(2. * s) * 0.035;
+    p = rotZ(p, sin(s + 0.6) * 0.035);
+    return rotY(rotX(p, 0.08), -0.32 + sin(uTime * 0.2) * 0.08);
+  }
+  if(h == 9){ // red squirrel: nibbles the nut in bursts, tail sways, breathes
+    float burst = step(0.2, sin(uTime * 0.9));
+    float nib = (0.5 + 0.5 * sin(uTime * 11.)) * burst;
+    if(part > 21.5 && part < 22.5) p.xy = rot2(p.xy - o.yz, -0.045 * nib + 0.05 * sin(uTime * 0.45)) + o.yz;
+    if(part > 22.5 && part < 23.5){ p.y += nib * 0.014; p.x -= nib * 0.006; }
+    if(part > 4.5 && part < 5.5){ p.x += sin(uTime * 1.1 + o.y * 3.) * 0.05 * o.y; p.z += sin(uTime * 0.8 + o.y * 2.) * 0.07 * o.y; }
+    p.y += sin(uTime * 2.4) * 0.008;
+    return rotY(rotX(p, 0.05), -0.55 + sin(uTime * 0.3) * 0.15);
+  }
+  if(h == 10){ // heart: lub-dub at ~66 bpm. Atria squeeze, then the ventricles; the arteries pulse
+    float bt = fract(uTime * 1.1);
+    float atr = exp(-pow((bt - 0.06) / 0.05, 2.));
+    float ven = smoothstep(0.1, 0.2, bt) * (1. - smoothstep(0.32, 0.55, bt));
+    if(o.y < 0.5){ vec3 c = HEART_V; p = c + (p - c) * vec3(1. - 0.075 * ven, 1. - 0.045 * ven, 1. - 0.075 * ven); glow += ven * 0.2; }
+    else if(o.y < 1.5){ vec3 c = HEART_A; p = c + (p - c) * (1. - 0.07 * atr); }
+    else { glow += ven * 0.25; p = p * (1. + 0.015 * ven); } // the arteries swell with each beat
+    return rotY(rotX(p, 0.05), 0.1 + sin(uTime * 0.35) * 0.4);
   }
   // butterfly: wings flap
   if(part > 5.5 && part < 6.5){
@@ -351,7 +401,7 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
 // accent, 5 black); fractional part = baked lighting (0 means unlit).
 vec3 heroTint(int h, float raw, inout float alpha, inout float glow){
   vec3 P = uHP[0], Sx = uHS[0];
-  for(int k = 1; k < 7; k++){ if(k == h){ P = uHP[k]; Sx = uHS[k]; } }
+  for(int k = 1; k < ${HERO_SHAPES.length}; k++){ if(k == h){ P = uHP[k]; Sx = uHS[k]; } }
   float t = floor(raw + 0.001), sh = raw - t;
   if(sh < 0.001) sh = 1.;
   vec3 c;
@@ -412,7 +462,7 @@ void main(){
   float t = uTime * 0.22;
   vec3 q = p * 0.75 + aRnd.xyz;
   vec3 n = vec3(snoise(q + t), snoise(q + t + 17.1), snoise(q + t + 31.7));
-  p += n * (0.025 + tr * (0.35 + aRnd.x * 0.8) + uScatter * (0.5 + aRnd.z));
+  p += n * (mix(0.025, 0.006, heroW) + tr * (0.35 + aRnd.x * 0.8) + uScatter * (0.5 + aRnd.z));
 
   // big bang: everything starts flung across space
   vec3 chaos = normalize(aRnd.xyz - 0.5 + 1e-3) * (3. + aRnd.w * 16.);
@@ -441,7 +491,7 @@ void main(){
   vec4 mv = viewMatrix * wp;
   gl_Position = projectionMatrix * mv;
   float depth = -mv.z;
-  float size = uSize * (0.45 + aRnd.z) * uPR / max(depth, 0.1) * (1. + ring * 1.5 + focus * 1.4 + glow * 0.7);
+  float size = uSize * (0.45 + aRnd.z) * mix(1., 0.72, heroW * (1. - htr)) * uPR / max(depth, 0.1) * (1. + ring * 1.5 + focus * 1.4 + glow * 0.7);
   gl_PointSize = min(size, 48. * uPR);
 
   vec3 col = aRnd.w > 0.84 ? uColB : (aRnd.w > 0.78 ? uColC : uColA);
@@ -450,7 +500,7 @@ void main(){
   vColor = mix(col, hot, clamp(force * 1.2 + ring + focus + glow * 0.8, 0., 1.));
   float dimOthers = 1. - uFocusAmt * w6 * 0.45 * (1. - focus);
   // the intro forms are denser than the other shapes; keep them from blowing out
-  alpha *= mix(1., 0.7, heroW);
+  alpha *= mix(1., 0.82, heroW);
   vAlpha = uGain * uDim * alpha * dimOthers * (0.35 + 0.55 * aRnd.z) * (1. + force * 0.8 + focus + glow * 0.6)
          * smoothstep(0.3, 2.2, depth);
 }`
@@ -612,15 +662,28 @@ export async function createScene(canvas, opts = {}) {
   for (let i = 0; i < rnd.length; i++) rnd[i] = r()
   geo.setAttribute('aRnd', new BufferAttribute(rnd, 4))
   geo.setAttribute('position', posAttr[0])
-  // the seven intro forms (bound to aA/aC while the intro is on screen)
+  // the intro forms (bound to aA/aC while the intro is on screen). The first is built now; the rest
+  // are sculpted in a worker, in the order they appear, and the cycle waits if one isn't ready yet.
   const heroPos = [], heroOrd = []
-  for (const f of HERO_SHAPES) {
-    const s = f(MAX)
-    heroPos.push(new BufferAttribute(s.pos, 3))
-    heroOrd.push(new BufferAttribute(s.order, 4))
-    await new Promise((r) => setTimeout(r, 0))
+  const addHero = (k, pos, order) => { heroPos[k] = new BufferAttribute(pos, 3); heroOrd[k] = new BufferAttribute(order, 4) }
+  { const k = HERO_SEQUENCE[0], s = HERO_SHAPES[k](MAX); addHero(k, s.pos, s.order) }
+  const pending = HERO_SEQUENCE.slice(1)
+  const buildLocally = () => { // fallback without workers: one form per idle slot
+    const k = pending.shift(); if (k === undefined) return
+    const s = HERO_SHAPES[k](MAX); addHero(k, s.pos, s.order)
+    setTimeout(buildLocally, 60)
   }
-  const hero = { t: 0, a: 0, b: 1, f: 0, shown: -1 }
+  try {
+    const worker = new Worker(new URL('./heroWorker.js', import.meta.url), { type: 'module' })
+    worker.onmessage = ({ data }) => {
+      addHero(data.k, data.pos, data.order)
+      const next = pending.shift()
+      if (next === undefined) worker.terminate(); else worker.postMessage({ k: next, n: MAX })
+    }
+    worker.onerror = () => { worker.terminate(); buildLocally() }
+    worker.postMessage({ k: pending.shift(), n: MAX })
+  } catch { setTimeout(buildLocally, 500) }
+  const hero = { t: 0, a: HERO_SEQUENCE[0], b: HERO_SEQUENCE[1], f: 0, shown: -1 }
   let boundA = null, boundB = -1, boundC = -1
   function bind(i0, i1) {
     const keyA = i0 === 0 ? 'h' + hero.a : i0
@@ -629,7 +692,7 @@ export async function createScene(canvas, opts = {}) {
       geo.setAttribute('aOA', i0 === 0 ? heroOrd[hero.a] : ordAttr[i0])
       boundA = keyA
     }
-    if (i0 === 0 && hero.b !== boundC) { geo.setAttribute('aC', heroPos[hero.b]); geo.setAttribute('aOC', heroOrd[hero.b]); boundC = hero.b }
+    if (i0 === 0 && hero.b !== boundC && heroPos[hero.b]) { geo.setAttribute('aC', heroPos[hero.b]); geo.setAttribute('aOC', heroOrd[hero.b]); boundC = hero.b }
     if (i1 !== boundB) { geo.setAttribute('aB', posAttr[i1]); geo.setAttribute('aOB', ordAttr[i1]); boundB = i1 }
   }
   bind(0, 1)
@@ -1060,16 +1123,20 @@ export async function createScene(canvas, opts = {}) {
     // intro forms: hold each one, then morph into the next, on a loop (paused while scrolled away)
     if (!reduced && !intro && j < 1.5) hero.t += Math.max(0, dt) // rAF time can start slightly behind `prev`
     const HOLD = 3.4, PERIOD = 5.2
-    const cyc = Math.floor(hero.t / PERIOD), local = hero.t - cyc * PERIOD
-    hero.a = ((cyc % HERO_SHAPES.length) + HERO_SHAPES.length) % HERO_SHAPES.length
-    hero.b = (hero.a + 1) % HERO_SHAPES.length
+    let cyc = Math.floor(hero.t / PERIOD), local = hero.t - cyc * PERIOD
+    const L = HERO_SEQUENCE.length
+    let pos = ((cyc % L) + L) % L
+    if (!heroPos[HERO_SEQUENCE[pos]]) { hero.t = HOLD; cyc = 0; local = HOLD; pos = 0 } // (only after a debug jump)
+    if (local > HOLD && !heroPos[HERO_SEQUENCE[(pos + 1) % L]]) { hero.t = cyc * PERIOD + HOLD; local = HOLD } // next form still sculpting
+    hero.a = HERO_SEQUENCE[pos]
+    hero.b = HERO_SEQUENCE[(pos + 1) % L]
     const hx = MathUtils.clamp((local - HOLD) / (PERIOD - HOLD), 0, 1)
     hero.f = hx * hx * (3 - 2 * hx)
     uniforms.uHA.value = hero.a
     uniforms.uHB.value = hero.b
     uniforms.uHF.value = hero.f
-    const showing = hero.f > 0.5 ? hero.b : hero.a
-    if (showing !== hero.shown) { hero.shown = showing; onHero?.(showing, HERO_NAMES[showing], HERO_SHAPES.length) }
+    const showing = hero.f > 0.5 ? (pos + 1) % L : pos
+    if (showing !== hero.shown) { hero.shown = showing; onHero?.(showing, HERO_NAMES[HERO_SEQUENCE[showing]], L) }
     bind(i0, i1)
     uniforms.uI0.value = i0
     uniforms.uI1.value = i1
@@ -1272,8 +1339,8 @@ export async function createScene(canvas, opts = {}) {
     setGyro(x, y) { gyro.on = true; gyro.x = MathUtils.clamp(x, -1, 1); gyro.y = MathUtils.clamp(y, -1, 1) },
     setVisitor,
     get tier() { return tier },
-    setHero(k) { hero.t = k * 5.2 },
-    setEntry(v) { uniforms.uEntry.value = v },
+    setHero(k) { hero.t = Math.max(0, HERO_SEQUENCE.indexOf(k)) * 5.2 }, // k = form slot
+    setEntry(v) { uniforms.uEntry.value = v; if (intro) intro.t = intro.dur * v }, // debug: scrub the eagle's arrival
     get settled() { return Math.abs(sample(scrollY).morph - cur.morph) < 0.02 },
     get debug() { return { focus: uniforms.uFocusAmt.value, focusTarget, morph: cur.morph, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
   }

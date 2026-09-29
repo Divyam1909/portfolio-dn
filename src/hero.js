@@ -6,7 +6,9 @@
 // All forms are built upright and untilted, roughly within a radius of 2.1.
 
 import { compose, gauss, randomOnSphere, neuralSphere } from './shapes.js'
-import { eagle, tiger, whale, butterfly } from './fauna.js'
+import { eagle, whale, butterfly } from './fauna.js'
+import { tiger, fox, cheetah, squirrel } from './mammals.js'
+import { heart } from './heart.js'
 
 const TAU = Math.PI * 2
 const lerp = (a, b, t) => a + (b - a) * t
@@ -139,8 +141,9 @@ export function robot(n) {
   ])
 }
 
-export const HERO_SHAPES = [eagle, rocket, neural, robot, whale, tiger, butterfly]
-export const HERO_NAMES = ['Golden eagle', 'Rocket', 'Neural sphere', 'Transformer', 'Blue whale', 'Tiger', 'Butterfly']
+// Slots (the shader's heroAnim/heroTint switch on these indices)
+export const HERO_SHAPES = [eagle, rocket, neural, robot, whale, tiger, butterfly, fox, cheetah, squirrel, heart]
+export const HERO_NAMES = ['Golden eagle', 'Rocket', 'Neural sphere', 'Transformer', 'Blue whale', 'Tiger', 'Butterfly', 'Red fox', 'Cheetah', 'Red squirrel', 'Heart']
 // [primary, secondary] colour per form; the primary one also tints the aura behind it
 export const HERO_COLORS = [
   ['#e8a93c', '#ffd35a'], // golden eagle: gold plumage, yellow beak and feet
@@ -150,4 +153,10 @@ export const HERO_COLORS = [
   ['#4b8fe8', '#a9c9ee'], // blue whale: blue-grey with a paler belly
   ['#f27a1c', '#ffd28a'], // tiger: orange coat, amber eyes
   ['#2d8cff', '#7fe3ff'], // butterfly: blue morpho with a cyan sheen
+  ['#ec6a24', '#ffb347'], // red fox: russet coat, amber eyes
+  ['#e2ab52', '#ffcf6b'], // cheetah: tawny gold, amber eyes
+  ['#c9612b', '#e8c49a'], // red squirrel: russet, cream hazelnut and hair tips
+  ['#e3263f', '#4a78ff'], // heart: crimson muscle and arteries, blue veins
 ]
+// the order they appear in: the eagle opens, animals alternate with the other forms
+export const HERO_SEQUENCE = [0, 1, 7, 2, 4, 8, 3, 10, 9, 5, 6]

@@ -9,26 +9,26 @@
 
 import { rng, gauss } from './shapes.js'
 
-const TAU = Math.PI * 2
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
-const lerp = (a, b, t) => a + (b - a) * t
-const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t) }
-const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s]
-const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-const len = (a) => Math.hypot(a[0], a[1], a[2])
-const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l] }
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
-const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)]
+export const TAU = Math.PI * 2
+export const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
+export const lerp = (a, b, t) => a + (b - a) * t
+export const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t) }
+export const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+export const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+export const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s]
+export const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+export const len = (a) => Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) // (Math.hypot is slow)
+export const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l] }
+export const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+export const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)]
 
 /* ---------- value noise ---------- */
-function hash3(x, y, z) {
+export function hash3(x, y, z) {
   let h = (x * 374761393 + y * 668265263 + z * 2147483647) | 0
   h = Math.imul(h ^ (h >>> 13), 1274126177)
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296
 }
-function noise(p) {
+export function noise(p) {
   const xi = Math.floor(p[0]), yi = Math.floor(p[1]), zi = Math.floor(p[2])
   const xf = p[0] - xi, yf = p[1] - yi, zf = p[2] - zi
   const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf)
@@ -36,25 +36,41 @@ function noise(p) {
   return lerp(lerp(lerp(c(0, 0, 0), c(1, 0, 0), u), lerp(c(0, 1, 0), c(1, 1, 0), u), v),
     lerp(lerp(c(0, 0, 1), c(1, 0, 1), u), lerp(c(0, 1, 1), c(1, 1, 1), u), v), w)
 }
-const fbm = (p) => noise(p) * 0.5 + noise(mul(p, 2.03)) * 0.3 + noise(mul(p, 4.1)) * 0.2
+export const fbm = (p) => noise(p) * 0.5 + noise(mul(p, 2.03)) * 0.3 + noise(mul(p, 4.1)) * 0.2
 
-/* ---------- lighting ---------- */
+/* ---------- lighting ----------
+   Light is baked in the view the animal is shown in (its rest pose in the shader), so the key
+   light, the shadows and the bright silhouette rim line up with what the camera actually sees. */
 const KEY = norm([-0.45, 0.75, 0.6])
 const FILL = norm([0.6, -0.2, 0.4])
-function shadeOf(n, extra = 0) {
-  const d = Math.max(0, dot(n, KEY)), f = Math.max(0, dot(n, FILL)) * 0.25
-  const rim = Math.pow(1 - Math.abs(n[2]), 3) * 0.25 // silhouettes catch light
-  return clamp(0.12 + d * 0.72 + f + rim + extra, 0.02, 0.98)
+let VIEW = (v) => v
+// rest-pose rotation, same order as the shader: rotZ(rotY(rotX(p, x), y), z)
+export function setView(x = 0, y = 0, z = 0) {
+  VIEW = (v) => {
+    let [a, b, c] = v, cs = Math.cos(x), sn = Math.sin(x)
+    ;[b, c] = [b * cs - c * sn, b * sn + c * cs]
+    cs = Math.cos(y); sn = Math.sin(y)
+    ;[a, c] = [a * cs + c * sn, -a * sn + c * cs]
+    cs = Math.cos(z); sn = Math.sin(z)
+    ;[a, b] = [a * cs - b * sn, a * sn + b * cs]
+    return [a, b, c]
+  }
 }
-const T = (tint, shade) => tint + clamp(shade, 0.02, 0.98)
+export function shadeOf(n, extra = 0) {
+  n = VIEW(n)
+  const d = Math.max(0, dot(n, KEY)), f = Math.max(0, dot(n, FILL)) * 0.25
+  const rim = Math.pow(1 - Math.abs(n[2]), 3) * 0.3 // silhouettes catch light
+  return clamp(0.1 + d * 0.74 + f + rim + extra, 0.02, 0.98)
+}
+export const T = (tint, shade) => tint + clamp(shade, 0.02, 0.98)
 
 /* ---------- SDF primitives (after Inigo Quilez) ---------- */
-function sdEllipsoid(p, c, r) {
+export function sdEllipsoid(p, c, r) {
   const q = [(p[0] - c[0]) / r[0], (p[1] - c[1]) / r[1], (p[2] - c[2]) / r[2]]
   const k0 = len(q), k1 = len([q[0] / r[0], q[1] / r[1], q[2] / r[2]])
   return k1 > 1e-6 ? (k0 * (k0 - 1)) / k1 : -Math.min(r[0], r[1], r[2])
 }
-function sdRoundCone(p, a, b, r1, r2) {
+export function sdRoundCone(p, a, b, r1, r2) {
   const ba = sub(b, a), l2 = dot(ba, ba), rr = r1 - r2, a2 = l2 - rr * rr, il2 = 1 / l2
   const pa = sub(p, a), y = dot(pa, ba), z = y - l2
   const xv = sub(mul(pa, l2), mul(ba, y)), x2 = dot(xv, xv)
@@ -67,23 +83,43 @@ function sdRoundCone(p, a, b, r1, r2) {
 const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25 }
 
 // A sculpt is a list of primitives { e: [c, r] } or { c: [a, b, r1, r2] }, each with an optional tag.
-function makeSculpt(prims, k = 0.08) {
-  const dist = (p) => {
+export function makeSculpt(prims, k = 0.08) {
+  // bounding spheres: a primitive further away than the current distance plus its blend radius
+  // can't change the blended result, so it is skipped (the big speed-up for detailed sculpts)
+  const bounds = prims.map((q) => {
+    if (q.e) return [...q.e[0], Math.max(...q.e[1]), q.k ?? k]
+    const [a, b, r1, r2] = q.c
+    return [...mix3(a, b, 0.5), len(sub(b, a)) / 2 + Math.max(r1, r2), q.k ?? k]
+  })
+  const distIn = (list) => (p) => {
     let d = 1e9
-    for (const q of prims) d = smin(d, q.e ? sdEllipsoid(p, q.e[0], q.e[1]) : sdRoundCone(p, ...q.c), q.k ?? k)
+    for (let li = 0; li < list.length; li++) {
+      const i = list[li], B = bounds[i], x = p[0] - B[0], y = p[1] - B[1], z = p[2] - B[2], m = d + B[4] + B[3]
+      if (d < 1e8 && x * x + y * y + z * z > m * m) continue
+      const q = prims[i]
+      d = smin(d, q.e ? sdEllipsoid(p, q.e[0], q.e[1]) : sdRoundCone(p, q.c[0], q.c[1], q.c[2], q.c[3]), B[4])
+    }
     return d
   }
-  const grad = (p) => {
+  const gradOf = (f) => (p) => {
     const h = 0.002
-    return norm([dist([p[0] + h, p[1], p[2]]) - dist([p[0] - h, p[1], p[2]]),
-      dist([p[0], p[1] + h, p[2]]) - dist([p[0], p[1] - h, p[2]]),
-      dist([p[0], p[1], p[2] + h]) - dist([p[0], p[1], p[2] - h])])
+    return norm([f([p[0] + h, p[1], p[2]]) - f([p[0] - h, p[1], p[2]]),
+      f([p[0], p[1] + h, p[2]]) - f([p[0], p[1] - h, p[2]]),
+      f([p[0], p[1], p[2] + h]) - f([p[0], p[1], p[2] - h])])
   }
+  const dist = distIn(prims.map((_, i) => i)), grad = gradOf(dist)
+  // near a given primitive only its neighbours can shape the surface: sample against those alone
+  const local = bounds.map((A) => {
+    const list = []
+    bounds.forEach((B, j) => { if (len(sub(A, B)) < A[3] + B[3] + 0.4) list.push(j) })
+    const f = distIn(list)
+    return { dist: f, grad: gradOf(f) }
+  })
   // surface areas for choosing which primitive to seed a sample from
   const areas = prims.map((q) => {
     if (q.e) { const [a, b, c] = q.e[1]; return 4 * Math.PI * Math.pow((Math.pow(a * b, 1.6) + Math.pow(a * c, 1.6) + Math.pow(b * c, 1.6)) / 3, 1 / 1.6) }
     const [a, b, r1, r2] = q.c; return Math.PI * (r1 + r2) * len(sub(b, a)) + 2 * Math.PI * (r1 * r1 + r2 * r2)
-  })
+  }).map((a, i) => a * (prims[i].w ?? 1)) // w: extra sampling density (faces, paws)
   const total = areas.reduce((s, v) => s + v, 0)
   const seed = (r) => {
     let x = r() * total, i = 0
@@ -96,22 +132,27 @@ function makeSculpt(prims, k = 0.08) {
     const e1 = norm(cross(axis, ref)), e2 = cross(axis, e1), ang = r() * TAU, rad = lerp(r1, r2, f)
     return { p: add(mix3(a, b, f), add(mul(e1, Math.cos(ang) * rad), mul(e2, Math.sin(ang) * rad))), i }
   }
-  // a point on the blended surface, its normal, and the primitive it grew from
+  // ambient occlusion: how open the space just outside the surface is (creases, armpits, eye sockets)
+  const occlOf = (f) => (p, n) => clamp((f(add(p, mul(n, 0.07))) / 0.07) * 0.6 + (f(add(p, mul(n, 0.16))) / 0.16) * 0.4, 0, 1)
+  const occl = occlOf(dist)
+  const project = (p) => { for (let it = 0; it < 4; it++) p = sub(p, mul(grad(p), dist(p))); return p }
+  // a point on the blended surface, its normal, the primitive it grew from and its occlusion
   const sample = (r) => {
     for (let tries = 0; tries < 20; tries++) {
       let { p, i } = seed(r)
-      if (dist(p) < -0.025) continue // buried inside another part
-      for (let it = 0; it < 3; it++) { const d = dist(p); p = sub(p, mul(grad(p), d)) }
-      if (Math.abs(dist(p)) < 0.01) return { p, n: grad(p), i, tag: prims[i].tag }
+      const L = local[i]
+      if (L.dist(p) < -0.025) continue // buried inside another part
+      for (let it = 0; it < 3; it++) { const d = L.dist(p); p = sub(p, mul(L.grad(p), d)) }
+      if (Math.abs(L.dist(p)) < 0.01) { const n = L.grad(p); return { p, n, i, tag: prims[i].tag, ao: occlOf(L.dist)(p, n) } }
     }
     const { p, i } = seed(r)
-    return { p, n: [0, 1, 0], i, tag: prims[i].tag }
+    return { p, n: [0, 1, 0], i, tag: prims[i].tag, ao: 1 }
   }
-  return { dist, sample }
+  return { dist, grad, sample, project, occl }
 }
 
 // fill `n` particles from weighted part generators; each returns [x, y, z, o0, o1, o2, o3]
-function build(n, seed, parts) {
+export function build(n, seed, parts) {
   const r = rng(seed)
   const pos = new Float32Array(n * 3), order = new Float32Array(n * 4).fill(-1)
   const total = parts.reduce((a, p) => a + p[0], 0)
@@ -134,7 +175,7 @@ function build(n, seed, parts) {
 
 /* A feather: base, direction and up vector, length, half-width, curl. Returns a point on it
    (shaft or vane, with a crisp outline) and a normal for lighting. */
-function feather(r, base, dir, up, L, W, o = {}) {
+export function feather(r, base, dir, up, L, W, o = {}) {
   const side = norm(cross(dir, up))
   const t = Math.pow(r(), o.tipBias ?? 0.85)
   const q = r()
@@ -155,6 +196,7 @@ function feather(r, base, dir, up, L, W, o = {}) {
    Wing particles: order = (tint+shade, span 0…1, side ±1, part 1). Tail: part 11.
    ========================================================================================== */
 export function eagle(n) {
+  setView(-0.55, 0.35, 0.2)
   const body = makeSculpt([
     { e: [[0, 0, -0.02], [0.23, 0.21, 0.5]] }, // torso
     { e: [[0, -0.05, 0.2], [0.21, 0.2, 0.3]] }, // breast
@@ -181,8 +223,8 @@ export function eagle(n) {
 
   return build(n, 401, [
     [16, (r) => { // body plumage: dark brown, golden hackles on the nape and crown
-      const { p, n: nn, tag } = body.sample(r)
-      const sh = shadeOf(nn)
+      const { p, n: nn, tag, ao } = body.sample(r)
+      const sh = shadeOf(nn) * lerp(0.35, 1, ao)
       if (tag === 'beak') return [...p, T(1, sh), -1, -1, 0]
       if (tag === 'hook' || tag === 'talon') return [...p, T(5, sh), -1, -1, 0]
       const nape = sstep(0.35, 0.65, p[2]) * sstep(0.0, 0.1, p[1]) // golden head & nape
@@ -190,7 +232,7 @@ export function eagle(n) {
       const tint = nape > 0.5 && streak > 0.35 ? 0 : streak > 0.62 ? 0 : 3
       return [...p, T(tint, sh * (0.8 + streak * 0.4)), -1, -1, 0]
     }],
-    [1, (r, i) => { const side = i % 2 ? 1 : -1; return [side * 0.085, 0.16, 0.8, T(4, 0.9), -1, -1, 0] }], // eyes
+    [0.35, (r, i) => { const side = i % 2 ? 1 : -1; return [side * 0.085 + gauss(r) * 0.006, 0.16 + gauss(r) * 0.006, 0.8, T(4, 0.8), -1, -1, 0] }], // eyes
     [14, (r) => { // secondaries: 14 per wing along the forearm, tips forming a serrated trailing edge
       const side = r() < 0.5 ? -1 : 1, k = Math.floor(r() * 14), s = 0.05 + (k / 13) * 0.62
       const b = bone(s), dir = norm([0.05 + s * 0.12, -0.02, -1])
@@ -233,111 +275,12 @@ export function eagle(n) {
 }
 
 /* ============================================================================================
-   TIGER — Panthera tigris, mid-stride. x = forward (head +x), y = up, z = side.
-   Legs: part 12 + index, a = pivot x, b = pivot y. Tail: part 5, a = t along the tail.
-   ========================================================================================== */
-export function tiger(n) {
-  const X = 0.18 // shift so the whole animal is centred
-  const legs = [ // [shoulder/hip, elbow/knee, wrist/hock, paw, z, isRear]
-    [[0.62, 0.08], [0.66, -0.36], [0.72, -0.8], 0.19, 0],
-    [[0.58, 0.08], [0.5, -0.38], [0.46, -0.8], -0.19, 0],
-    [[-0.72, 0.14], [-0.5, -0.24], [-0.8, -0.56], 0.18, 1],
-    [[-0.68, 0.14], [-0.6, -0.26], [-0.92, -0.52], -0.18, 1],
-  ]
-  const prims = [
-    { e: [[0.52, 0.16, 0], [0.5, 0.43, 0.31]], tag: 'body' }, // chest & shoulders
-    { c: [[0.45, 0.14, 0], [-0.55, 0.14, 0], 0.37, 0.33], tag: 'body' }, // barrel
-    { e: [[-0.66, 0.2, 0], [0.38, 0.38, 0.3]], tag: 'body' }, // hips
-    { e: [[0.45, 0.48, 0.1], [0.2, 0.1, 0.1]], tag: 'body' }, { e: [[0.45, 0.48, -0.1], [0.2, 0.1, 0.1]], tag: 'body' }, // scapulae
-    { e: [[0.05, -0.12, 0], [0.55, 0.14, 0.26]], tag: 'belly' },
-    { c: [[0.8, 0.3, 0], [1.08, 0.44, 0], 0.27, 0.22], tag: 'neck' },
-    { e: [[1.2, 0.5, 0], [0.27, 0.24, 0.24]], tag: 'head' }, // skull
-    { e: [[1.16, 0.37, 0.13], [0.17, 0.15, 0.1]], tag: 'ruff' }, { e: [[1.16, 0.37, -0.13], [0.17, 0.15, 0.1]], tag: 'ruff' },
-    { e: [[1.43, 0.4, 0], [0.14, 0.11, 0.13]], tag: 'muzzle', k: 0.06 },
-    { e: [[1.5, 0.43, 0], [0.045, 0.035, 0.05]], tag: 'nose', k: 0.03 },
-    { e: [[1.36, 0.3, 0], [0.12, 0.05, 0.09]], tag: 'jaw', k: 0.05 },
-    { e: [[1.1, 0.72, 0.16], [0.04, 0.09, 0.08]], tag: 'ear', k: 0.04 }, { e: [[1.1, 0.72, -0.16], [0.04, 0.09, 0.08]], tag: 'ear', k: 0.04 },
-  ]
-  legs.forEach(([a, b, c, z, rear], li) => {
-    const A = [a[0], a[1], z], B = [b[0], b[1], z], C = [c[0], c[1], z]
-    const paw = rear ? [c[0] + 0.08, -0.9, z] : [c[0] + 0.07, -0.92, z]
-    prims.push({ c: [A, B, rear ? 0.2 : 0.17, rear ? 0.12 : 0.11], tag: 'leg' + li })
-    prims.push({ c: [B, C, rear ? 0.1 : 0.1, 0.075], tag: 'leg' + li })
-    if (rear) prims.push({ c: [C, [c[0] + 0.03, -0.88, z], 0.075, 0.07], tag: 'leg' + li })
-    prims.push({ e: [paw, [0.13, 0.065, 0.1]], tag: 'leg' + li, k: 0.05 })
-  })
-  const tailPts = [[-0.95, 0.28], [-1.3, 0.1], [-1.6, -0.2], [-1.82, -0.36], [-1.98, -0.26]]
-  for (let k = 0; k < 4; k++) prims.push({ c: [[...tailPts[k], 0], [...tailPts[k + 1], 0], 0.085 - k * 0.012, 0.075 - k * 0.012], tag: 'tail', k: 0.04 })
-  const body = makeSculpt(prims, 0.12)
-  const tailT = (p) => { // approximate position along the tail
-    let best = 0, bd = 9
-    for (let k = 0; k <= 40; k++) {
-      const t = k / 40, f = t * 4, i = Math.min(3, Math.floor(f)), q = mix3([...tailPts[i], 0], [...tailPts[i + 1], 0], f - i)
-      const d = len(sub(q, p)); if (d < bd) { bd = d; best = t }
-    }
-    return best
-  }
-  return build(n, 411, [
-    [92, (r) => {
-      const { p, n: nn, tag } = body.sample(r)
-      const sh = shadeOf(nn)
-      const q = [p[0] - X, p[1], p[2]]
-      const warp = fbm([p[0] * 1.6, p[1] * 1.6, p[2] * 1.6])
-      let tint = 0
-      if (tag === 'nose') return [...q, T(5, sh), -1, -1, 0]
-      if (tag === 'tail') {
-        const t = tailT(p)
-        tint = t > 0.9 || Math.sin(t * 30 + warp * 2) > 0.45 ? 5 : nn[1] < -0.3 ? 2 : 0
-        return [...q, T(tint, sh), t, -1, 5]
-      }
-      const leg = tag.startsWith('leg') ? +tag[3] : -1
-      // white: belly, chest, inner legs, muzzle, cheeks, eyebrow spots
-      const belly = (tag === 'belly' || tag === 'body') && nn[1] < -0.35
-      const chest = tag !== 'head' && p[0] > 0.75 && nn[1] < 0.1 && tag !== 'ruff'
-      const inner = leg >= 0 && Math.sign(nn[2]) !== Math.sign(legs[leg][3])
-      const face = (tag === 'muzzle' || tag === 'jaw') || (tag === 'ruff' && nn[1] < 0.2) || (tag === 'head' && p[0] > 1.28 && p[1] > 0.52 && Math.abs(p[2]) > 0.05 && Math.abs(p[2]) < 0.14)
-      if (belly || chest || inner || face) tint = 2
-      // black stripes: vertical on body and neck, rings on legs, around the eyes on the face
-      let stripe = false
-      if (tag === 'body' || tag === 'neck' || tag === 'belly') {
-        const v = Math.sin((p[0] * 7.2 + warp * 2.2 + Math.abs(p[2]) * 1.2) * Math.PI)
-        stripe = v > 0.62 - (nn[1] > 0.5 ? 0.15 : 0) && nn[1] > -0.55 && !(p[0] > 0.9 && nn[1] < 0)
-      } else if (leg >= 0) {
-        stripe = Math.sin((p[1] * 9 + warp * 2) * Math.PI) > 0.75 && p[1] > -0.7 && !inner
-      } else if (tag === 'head') {
-        stripe = Math.sin((Math.atan2(p[1] - 0.48, p[0] - 1.15) * 5 + warp * 3)) > 0.82 && p[0] < 1.3
-      } else if (tag === 'ruff') {
-        stripe = Math.sin((p[0] * 14 + warp * 3)) > 0.8
-      } else if (tag === 'ear') {
-        tint = nn[0] < 0 ? 5 : 0 // black backs of the ears
-      }
-      if (stripe) tint = 5
-      const out = [...q, T(tint, sh * (0.85 + warp * 0.3))]
-      if (leg >= 0) { const [[ax, ay]] = legs[leg]; return [...out, ax - X, ay, 12 + leg] }
-      return [...out, -1, -1, 0]
-    }],
-    [2, (r, i) => { // eyes: amber, with a catchlight
-      const side = i % 2 ? 1 : -1
-      return [1.34 - X + gauss(r) * 0.008, 0.53 + gauss(r) * 0.008, side * 0.115, T(4, 0.95), -1, -1, 0]
-    }],
-    [1, (r) => { // whiskers
-      const side = r() < 0.5 ? -1 : 1, k = Math.floor(r() * 5), t = r()
-      const a = [1.47 - X, 0.38, side * 0.11], b = [1.47 - X - 0.02 + t * 0.06, 0.38 - k * 0.02 - t * 0.05, side * (0.11 + t * 0.32)]
-      return [...mix3(a, b, t), T(2, 0.9), -1, -1, 0]
-    }],
-    [4, (r) => { // ground shadow-light: a faint pool of dust under the paws
-      const a = r() * TAU, rr = Math.sqrt(r())
-      return [Math.cos(a) * 1.5 * rr - 0.1, -0.98, Math.sin(a) * 0.45 * rr, T(3, 0.1 + 0.2 * (1 - rr)), -1, -1, 0]
-    }],
-  ])
-}
-
-/* ============================================================================================
    BLUE WHALE — Balaenoptera musculus. x = forward (snout +x). Long and slender, flat U-shaped
    head, splashguard, throat pleats, tiny dorsal fin far back, long pectorals, notched flukes.
    Body particles: part 3 with a = u (0 tail … 1 snout). Spout: part 9.
    ========================================================================================== */
 export function whale(n) {
+  setView(0.18, -0.55, 0.04)
   const L = 4.2, X0 = -L / 2 + 0.05
   const R = (u) => { // body radius along the length
     const base = 0.4 * Math.pow(Math.sin(Math.PI * Math.min(1, Math.pow(u, 0.72) * 0.92 + 0.05)), 0.9)
@@ -398,7 +341,7 @@ export function whale(n) {
    BUTTERFLY — Blue morpho (Morpho peleides), wings open. x = span, y = along the body.
    Iridescent blue with black borders, a row of white spots and dark veins. Wings: part 6.
    ========================================================================================== */
-function spline(pts, samples = 18) { // closed Catmull-Rom
+export function spline(pts, samples = 18) { // closed Catmull-Rom
   const out = []
   for (let i = 0; i < pts.length; i++) {
     const p0 = pts[(i - 1 + pts.length) % pts.length], p1 = pts[i], p2 = pts[(i + 1) % pts.length], p3 = pts[(i + 2) % pts.length]
@@ -409,7 +352,7 @@ function spline(pts, samples = 18) { // closed Catmull-Rom
   }
   return out
 }
-function inside(poly, x, y) {
+export function inside(poly, x, y) {
   let c = false
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const [xi, yi] = poly[i], [xj, yj] = poly[j]
@@ -424,6 +367,7 @@ function edgeDist(poly, x, y, from = 0, to = 1) { // distance to part of the out
   return d
 }
 export function butterfly(n) {
+  setView(-0.4, 0, 0)
   const S = 0.95
   const FW = spline([[0.06, 0.08], [0.35, 0.6], [0.75, 0.98], [1.15, 1.22], [1.48, 1.3], [1.66, 1.16], [1.62, 0.9], [1.5, 0.55], [1.36, 0.25], [1.18, 0.02], [0.7, -0.02], [0.2, 0.0]])
   const HW = spline([[0.06, -0.02], [0.55, 0.02], [0.98, -0.05], [1.26, -0.24], [1.36, -0.52], [1.28, -0.8], [1.08, -1.06], [0.78, -1.2], [0.46, -1.18], [0.22, -0.98], [0.1, -0.62], [0.04, -0.28]])
