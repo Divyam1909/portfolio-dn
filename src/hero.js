@@ -89,7 +89,7 @@ export const HERO_COLORS = [
   ['#9b7bff', '#5ef2ff'], // wormhole: violet space grid, cyan light
   ['#e0a060', '#ff4d6d'], // turntable: warm plinth, red label and notes
   ['#9a8cff', '#ff8ad8'], // jellyfish: lavender bell, pink arms and gonads
-  ['#d8283a', '#f2c14e'], // samurai: red lacquer, gold
+  ['#ff9cc8', '#d8283a'], // samurai: cherry blossom pink, crimson armour
   ['#e8433a', '#ffc94a'], // dragon: red scales, golden belly, spines and horns
 ]
 // the order they appear in: the butterfly flies in and opens, the brain follows the heart

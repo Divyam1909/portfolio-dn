@@ -4,8 +4,8 @@
 
 import { HEART_CENTRES } from './heart.js'
 import { BRAIN_Z, BRAIN_VIEW } from './brain.js'
-import { ATOM_ORBITS, HOLE, GEARS, GEAR_VIEW, GLASS, WORM, WORM_VIEW, DECK, NOTE_BASE } from './objects.js'
-import { DRAGON_VIEW } from './creatures.js'
+import { ATOM_ORBITS, HOLE, GEARS, GEAR_VIEW, GLASS, CLOCK, WORM, WORM_VIEW, DECK, NOTE_BASE } from './objects.js'
+import { DRAGON_VIEW, DRAGON_FIRE, SAMURAI_VIEW } from './creatures.js'
 
 const f3 = (v) => `vec3(${v.map((x) => x.toFixed(4)).join(', ')})`
 const HELPERS = /* glsl */ `
@@ -14,6 +14,7 @@ const vec3 HEART_V = ${f3(HEART_CENTRES.ventricles)};
 const vec3 HEART_A = ${f3(HEART_CENTRES.atria)};
 ${ATOM_ORBITS.map((o, k) => `const vec3 ATOM_N${k} = ${f3(o.n)}; const float ATOM_W${k} = ${o.w.toFixed(4)};`).join('\n')}
 ${GEARS.map((g, k) => `const vec2 GEAR_C${k} = vec2(${g.c.map((x) => x.toFixed(4)).join(', ')}); const float GEAR_W${k} = ${g.w.toFixed(4)};`).join('\n')}
+const vec3 FIRE_M = ${f3(DRAGON_FIRE.mouth)}, FIRE_D = ${f3(DRAGON_FIRE.dir)}, FIRE_E1 = ${f3(DRAGON_FIRE.e1)}, FIRE_E2 = ${f3(DRAGON_FIRE.e2)};
 float glassR(float y){ return ${GLASS.RN.toFixed(4)} + ${(GLASS.RB - GLASS.RN).toFixed(4)} * pow(sin(PI * clamp(abs(y) / ${GLASS.H.toFixed(4)}, 0., 1.) * 0.85), 0.75); }
 // where grain u (its rank) sits at sand progress st: 0 all in the top bulb … 1.035 all landed
 vec3 sandAt(float u, float st, float r1, float ang){
@@ -121,7 +122,7 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
     }
     float beam = 1. + 0.45 * q.x / max(length(q.xz), 1e-3); // the side coming towards us is brighter
     alpha *= beam; glow += max(0., beam - 1.) * 0.5;
-    vec3 w = rotX(q, ${HOLE.tilt.toFixed(3)});
+    vec3 w = rotY(rotX(rotX(q, ${HOLE.tilt.toFixed(3)}), uHeroRot.x), uHeroRot.y);
     if(w.z < 0. && length(w.xy) < ${HOLE.shadow.toFixed(3)}) alpha = 0.; // behind the hole
     return w;
   }
@@ -134,6 +135,15 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
     return rotY(rotX(p, ${GEAR_VIEW[0].toFixed(3)}), ${GEAR_VIEW[1].toFixed(3)} + sin(uTime * 0.25) * 0.22);
   }
   if(h == 8){ // hourglass: the sand runs through, the glass turns over, the sand settles again
+    float sway = sin(uTime * 0.3) * 0.3;
+    if(part > 49.5 && part < 50.5){ // the clock: hands turn to the visitor's local time
+      float hand = o.y, ang = 0.;
+      if(hand > 0.5 && hand < 1.5) ang = uClock / 43200. * 6.2831853;
+      else if(hand > 1.5 && hand < 2.5) ang = uClock / 3600. * 6.2831853;
+      else if(hand > 2.5){ float s = floor(uClock), f = fract(uClock); ang = (s + smoothstep(0., 0.18, f)) / 60. * 6.2831853; } // ticks
+      p.xy = rot2(p.xy, -ang);
+      return rotY(p, sway * 0.6);
+    }
     float cyc = fract(uTime / 12.);
     float flip = PI * smoothstep(0.88, 0.99, cyc);
     if(part > 35.5 && part < 36.5){
@@ -142,7 +152,7 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
       p = sandAt(o.y, st, r1, ang);
       if(cyc < 0.07){ vec3 s0 = sandAt(o.y, 1.035, r1, ang); p = mix(vec3(-s0.x, -s0.y, s0.z), p, smoothstep(0., 0.07, cyc)); }
     }
-    return rotY(rotZ(p, flip), sin(uTime * 0.3) * 0.3);
+    return rotY(rotZ(p, flip), sway);
   }
   if(h == 9){ // tesseract: turning in the xw and zw planes, projected in 4D perspective
     vec4 q = vec4(p, o.y);
@@ -192,16 +202,37 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
     glow += 0.15 * c;
     return rotZ(rotX(p, 0.3), sin(uTime * 0.4) * 0.07) + vec3(0., 0.1 * sin(ph - 1.3) - 0.05, 0.);
   }
-  if(h == 13){ // samurai: the eyes smoulder, the hair stirs, the helmet turns to look about
-    if(part > 43.5 && part < 44.5){ float e = 0.5 + 0.5 * sin(uTime * 2.2); glow += (0.15 + 0.45 * e) * (1. - o.y * 0.6); alpha *= 0.7 + 0.3 * e; }
-    if(part > 44.5 && part < 45.5) p.x += sin(uTime * 1.3 + p.y * 3.) * 0.025 * o.y;
-    return rotY(rotX(p, sin(uTime * 0.5) * 0.04), -0.2 + sin(uTime * 0.35) * 0.45) + vec3(0., sin(uTime * 0.9) * 0.04, 0.);
+  if(h == 13){ // samurai: light runs down the blade, the blossom stirs, petals drift to the ground
+    if(part > 52.5 && part < 53.5){ float g = exp(-pow((o.y - fract(uTime * 0.3) * 1.4 + 0.2) * 9., 2.)); glow += g * 0.7; alpha *= 1. + g * 0.6; }
+    if(part > 53.5 && part < 54.5) p += vec3(sin(uTime * 0.7 + p.x * 1.3) * 0.03, sin(uTime * 0.9 + p.z * 2.) * 0.012, cos(uTime * 0.6 + p.x) * 0.02) * o.y;
+    if(part > 51.5 && part < 52.5){
+      float t = fract(uTime * 0.075 + o.y), fall = p.y + 1.7;
+      p += vec3(t * 0.7 + sin(uTime * 1.3 + o.z * 20.) * 0.12 * t, -fall * t, cos(uTime * 1.1 + o.z * 13.) * 0.1 * t);
+      alpha *= smoothstep(0., 0.06, t) * (1. - smoothstep(0.9, 1., t)) * (0.55 + 0.45 * sin(uTime * 5. + o.z * 40.));
+    }
+    return rotY(rotX(p, ${SAMURAI_VIEW[0].toFixed(3)}), ${SAMURAI_VIEW[1].toFixed(3)} + sin(uTime * 0.2) * 0.22);
   }
   if(h == 14){ // dragon: a wave runs down the body to the tail, the barbels trail
     if(part > 45.5 && part < 46.5) p += vec3(0., sin(uTime * 1.7 - o.y * 16.) * 0.07, cos(uTime * 1.4 - o.y * 13.) * 0.06) * smoothstep(0., 0.25, o.y);
+    if(part > 48.5 && part < 49.5){ // fire, in bursts: each puff leaves the jaws, widens, rises, burns out
+      float age = fract(uTime * 0.85 + o.y), born = uTime - age / 0.85, cyc = fract(born / 4.2);
+      float burst = smoothstep(0., 0.05, cyc) * (1. - smoothstep(0.5, 0.62, cyc));
+      float rnd = fract(o.y * 57.31), ang = fract(o.y * 13.7) * 6.2831853 + age * 4.;
+      float spread = (0.02 + age * (0.2 + 0.45 * o.z)) * (0.6 + 0.8 * rnd);
+      p = FIRE_M + FIRE_D * (age * (1.5 + 0.4 * rnd)) + vec3(0., age * age * 0.35, 0.) + (FIRE_E1 * cos(ang) + FIRE_E2 * sin(ang)) * spread
+        + 0.07 * age * vec3(sin(uTime * 9. + o.y * 40.), sin(uTime * 7. + o.y * 31.), sin(uTime * 8. + o.y * 23.));
+      alpha *= burst * pow(1. - age, 1.2) * (1.15 - o.z * 0.45);
+      glow += burst * (1. - age) * (1.5 - o.z);
+    }
     if(part > 47.5 && part < 48.5) p += vec3(sin(uTime * 1.5 - o.y * 4.) * 0.03, sin(uTime * 2.2 - o.y * 5.) * 0.05, cos(uTime * 1.8 - o.y * 4.) * 0.04) * o.y;
     return rotY(rotX(p, ${DRAGON_VIEW[0].toFixed(3)}), ${DRAGON_VIEW[1].toFixed(3)} + sin(uTime * 0.22) * 0.3) + vec3(0., sin(uTime * 0.8) * 0.05, 0.);
   }
   return p;
+}
+// the form as the visitor has turned it by hand (the black hole applies it itself: its lensed
+// light always faces the viewer)
+vec3 heroPose(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
+  vec3 q = heroAnim(h, p, o, alpha, glow);
+  return h == 6 ? q : rotY(rotX(q, uHeroRot.x), uHeroRot.y);
 }
 `

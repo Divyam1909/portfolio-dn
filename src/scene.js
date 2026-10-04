@@ -72,7 +72,8 @@ attribute vec4 aRnd;
 uniform float uTime, uI0, uI1, uF, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uPulseT, uMouseF, uScale;
 uniform float uIntro, uCandle, uLeaf, uBook, uFocusAmt, uMouseR, uGain, uRelN;
 uniform vec4 uRel[8];
-uniform float uHA, uHB, uHF, uEntry;
+uniform float uHA, uHB, uHF, uEntry, uClock;
+uniform vec2 uHeroRot;
 uniform vec3 uHP[${HERO_SHAPES.length}], uHS[${HERO_SHAPES.length}];
 uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase, uStA, uStB;
 uniform vec2 uTilt;
@@ -313,7 +314,7 @@ void main(){
     float hs = aRnd.w * 0.45, hf = smoothstep(hs, hs + 0.55, uHF);
     float a1 = 1., a2 = 1., g1 = 0., g2 = 0.;
     vec3 ca = heroTint(hA, aOA.x, a1, g1), cb = heroTint(hB, aOC.x, a2, g2);
-    a = mix(heroAnim(hA, aA, aOA, a1, g1), heroAnim(hB, aC, aOC, a2, g2), hf);
+    a = mix(heroPose(hA, aA, aOA, a1, g1), heroPose(hB, aC, aOC, a2, g2), hf);
     alA = mix(a1, a2, hf); glA = mix(g1, g2, hf);
     heroCol = mix(ca, cb, hf);
     htr = sin(hf * PI);
@@ -505,7 +506,7 @@ const TIERS = [
 ]
 
 export async function createScene(canvas, opts = {}) {
-  const { onShapeChange, onProgress, onFrame, onPulse, onHero, labels = {} } = opts
+  const { onShapeChange, onProgress, onFrame, onPulse, onHero, labels = {}, heroArrows = [] } = opts
   const reducedMQ = matchMedia('(prefers-reduced-motion: reduce)')
   const coarse = matchMedia('(pointer: coarse)').matches
   const cores = navigator.hardwareConcurrency || 4
@@ -564,7 +565,12 @@ export async function createScene(canvas, opts = {}) {
     worker.onerror = () => { worker.terminate(); buildLocally() }
     worker.postMessage({ k: pending.shift(), n: MAX })
   } catch { setTimeout(buildLocally, 500) }
-  const hero = { t: 0, a: HERO_SEQUENCE[0], b: HERO_SEQUENCE[1], f: 0, shown: -1 }
+  // pos: place in the sequence; dir: the step being morphed (0 = holding); m: morph progress;
+  // held: the visitor turned this form by hand, so it stays until they step on
+  const hero = { pos: 0, dir: 0, m: 0, hold: 0, queue: 0, held: false, a: HERO_SEQUENCE[0], b: HERO_SEQUENCE[1], f: 0, shown: -1, manual: false }
+  const heroRot = { x: 0, y: 0, vx: 0, vy: 0, dragging: false, last: 0 }
+  const heroScreen = { x: 0, y: 0, r: 0 } // where the form is on screen (centre and radius, px)
+  const clock0 = (() => { const d = new Date(); return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000 - performance.now() / 1000 })()
   let boundA = null, boundB = -1, boundC = -1
   function bind(i0, i1) {
     const keyA = i0 === 0 ? 'h' + hero.a : i0
@@ -584,7 +590,7 @@ export async function createScene(canvas, opts = {}) {
   const flat = Array.from({ length: JOURNEY }, () => new Vector3())
 
   const uniforms = {
-    uHA: { value: 0 }, uHB: { value: 1 }, uHF: { value: 0 }, uEntry: { value: reducedMQ.matches ? 1 : 0 },
+    uHA: { value: 0 }, uHB: { value: 1 }, uHF: { value: 0 }, uEntry: { value: reducedMQ.matches ? 1 : 0 }, uClock: { value: 0 }, uHeroRot: { value: new Vector2() },
     uHP: { value: HERO_COLORS.map((c) => new Vector3(...hex(c[0]))) },
     uHS: { value: HERO_COLORS.map((c) => new Vector3(...hex(c[1]))) },
     uTime: { value: 0 }, uI0: { value: 0 }, uI1: { value: 1 }, uF: { value: 0 }, uScatter: { value: 0 },
@@ -932,6 +938,7 @@ export async function createScene(canvas, opts = {}) {
 
   addEventListener('pointerdown', (e) => {
     if (e.target.closest('a, button, input, textarea, select, label, dialog, [data-no-pulse]')) return
+    if (scrollY < innerHeight * 0.5 && Math.hypot(e.clientX - heroScreen.x, e.clientY - heroScreen.y) < heroScreen.r * 1.1) return // that's a turn of the intro form
     const nx = (e.clientX / innerWidth) * 2 - 1, ny = -(e.clientY / innerHeight) * 2 + 1
     screenToWorld(nx, ny, uniforms.uPulseO.value)
     uniforms.uPulseT.value = 0
@@ -1001,23 +1008,39 @@ export async function createScene(canvas, opts = {}) {
     const j = MathUtils.clamp(cur.morph, 0, JOURNEY - 1)
     const i0 = Math.floor(j), i1 = Math.min(i0 + 1, JOURNEY - 1), f = j - i0
     const st = reduced ? flat : stations
-    // intro forms: hold each one, then morph into the next, on a loop (paused while scrolled away)
-    if (!reduced && !intro && j < 1.5) hero.t += Math.max(0, dt) // rAF time can start slightly behind `prev`
-    const HOLD = 3.4, PERIOD = 5.2
-    let cyc = Math.floor(hero.t / PERIOD), local = hero.t - cyc * PERIOD
-    const L = HERO_SEQUENCE.length
-    let pos = ((cyc % L) + L) % L
-    if (!heroPos[HERO_SEQUENCE[pos]]) { hero.t = HOLD; cyc = 0; local = HOLD; pos = 0 } // (only after a debug jump)
-    if (local > HOLD && !heroPos[HERO_SEQUENCE[(pos + 1) % L]]) { hero.t = cyc * PERIOD + HOLD; local = HOLD } // next form still sculpting
-    hero.a = HERO_SEQUENCE[pos]
-    hero.b = HERO_SEQUENCE[(pos + 1) % L]
-    const hx = MathUtils.clamp((local - HOLD) / (PERIOD - HOLD), 0, 1)
-    hero.f = hx * hx * (3 - 2 * hx)
+    // intro forms: hold each one, then morph into the next, on a loop (paused while scrolled away).
+    // The arrows step either way; a form the visitor has turned by hand stays until they step on.
+    const HOLD = 3.4, L = HERO_SEQUENCE.length
+    if (!heroPos[HERO_SEQUENCE[hero.pos]]) { hero.pos = 0; hero.dir = 0; hero.m = 0 } // (only after a debug jump)
+    if (!intro && j < 1.5 && !reduced) {
+      const dts = Math.max(0, dt) // rAF time can start slightly behind `prev`
+      if (!hero.dir && !hero.held && !heroRot.dragging) { hero.hold += dts; if (hero.hold > HOLD) { hero.dir = 1; hero.manual = false } }
+      if (hero.dir && heroPos[HERO_SEQUENCE[(hero.pos + hero.dir + L) % L]]) { // (waits while the next form is still sculpting)
+        hero.m += dts / (hero.manual ? 1.1 : 1.8)
+        if (hero.m >= 1) {
+          hero.pos = (hero.pos + hero.dir + L) % L; hero.m = 0; hero.dir = 0; hero.hold = 0
+          if (hero.queue) { hero.dir = hero.queue; hero.queue = 0; hero.manual = true }
+        }
+      }
+    } else if (reduced && hero.dir) { hero.pos = (hero.pos + hero.dir + L) % L; hero.dir = 0; hero.m = 0 } // no morphs: step at once
+    const nextPos = (hero.pos + (hero.dir || 1) + L) % L
+    hero.a = HERO_SEQUENCE[hero.pos]
+    hero.b = HERO_SEQUENCE[nextPos]
+    hero.f = hero.m * hero.m * (3 - 2 * hero.m)
     uniforms.uHA.value = hero.a
     uniforms.uHB.value = hero.b
     uniforms.uHF.value = hero.f
-    const showing = hero.f > 0.5 ? (pos + 1) % L : pos
+    const showing = hero.f > 0.5 ? nextPos : hero.pos
     if (showing !== hero.shown) { hero.shown = showing; onHero?.(showing, HERO_NAMES[HERO_SEQUENCE[showing]], L) }
+    // hand rotation: follows the drag, coasts on release, and eases home once the visitor steps on
+    if (!heroRot.dragging) {
+      heroRot.y += heroRot.vy * dt; heroRot.x += heroRot.vx * dt
+      heroRot.vx *= Math.exp(-dt * 3); heroRot.vy *= Math.exp(-dt * 3)
+      if (!hero.held) { const k = 1 - Math.exp(-dt * 2.5); heroRot.x -= heroRot.x * k; heroRot.y -= heroRot.y * k }
+    }
+    heroRot.x = MathUtils.clamp(heroRot.x, -1.1, 1.1)
+    uniforms.uHeroRot.value.set(heroRot.x, heroRot.y)
+    uniforms.uClock.value = clock0 + now / 1000
     bind(i0, i1)
     uniforms.uI0.value = i0
     uniforms.uI1.value = i1
@@ -1119,6 +1142,7 @@ export async function createScene(canvas, opts = {}) {
     arcMat.opacity = ga * 0.9
     if (visitor) arcGeo.setDrawRange(0, Math.round(MathUtils.clamp((ga - 0.3) / 0.7, 0, 1) * (ARC + 1)))
 
+    placeHeroArrows(rigAlpha(0) * uniforms.uEntry.value)
     labelAt(labels.home, homeN, globeRig, ga)
     labelAt(labels.visitor, visitorN, globeRig, visitor ? ga : 0)
     const la = rigAlpha(S.LATTICE)
@@ -1166,6 +1190,30 @@ export async function createScene(canvas, opts = {}) {
 
   // project a rig-local point to the screen and position a DOM label there
   const _w = new Vector3(), _n = new Vector3(), _c = new Vector3()
+  // the arrows sit either side of the intro form, wherever it is on screen
+  const _e = new Vector3()
+  function placeHeroArrows(alpha) {
+    const c = stations[0]
+    _w.copy(c).project(camera)
+    _e.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(2.15 * uniforms.uScale.value).add(c).project(camera)
+    heroScreen.x = ((_w.x + 1) / 2) * innerWidth; heroScreen.y = ((1 - _w.y) / 2) * innerHeight
+    heroScreen.r = Math.abs(_e.x - _w.x) * innerWidth / 2
+    const on = alpha > 0.3
+    heroArrows.forEach((el, k) => {
+      if (!el) return
+      const x = Math.min(innerWidth - 28, Math.max(28, heroScreen.x + (k ? 1 : -1) * heroScreen.r))
+      el.style.transform = `translate(${x}px, ${heroScreen.y}px) translate(-50%, -50%)`
+      el.style.opacity = on ? '' : 0
+      el.style.pointerEvents = on ? '' : 'none'
+      el.tabIndex = on ? 0 : -1
+    })
+  }
+  function heroStep(d) {
+    hero.held = false
+    if (hero.dir) { if (!hero.queue && d === hero.dir) hero.queue = d; else if (d !== hero.dir) { hero.pos = (hero.pos + hero.dir + HERO_SEQUENCE.length) % HERO_SEQUENCE.length; hero.m = 1 - hero.m; hero.dir = d; hero.queue = 0 } ; return }
+    hero.dir = d; hero.m = 0; hero.manual = true
+  }
+
   function labelAt(el, local, rig, alpha, always = false) {
     if (!el) return
     if (!local || alpha < 0.05) { el.style.opacity = 0; return }
@@ -1220,9 +1268,22 @@ export async function createScene(canvas, opts = {}) {
     setGyro(x, y) { gyro.on = true; gyro.x = MathUtils.clamp(x, -1, 1); gyro.y = MathUtils.clamp(y, -1, 1) },
     setVisitor,
     get tier() { return tier },
-    setHero(k) { hero.t = Math.max(0, HERO_SEQUENCE.indexOf(k)) * 5.2 }, // k = form slot
+    setHero(k) { hero.pos = Math.max(0, HERO_SEQUENCE.indexOf(k)); hero.dir = 0; hero.m = 0; hero.hold = 0 }, // debug: k = form slot
+    heroStep, // -1 previous form, 1 next
+    // hand rotation of the intro form; a turned form stays until the visitor steps on
+    overHero(cx, cy) { return Math.hypot(cx - heroScreen.x, cy - heroScreen.y) < heroScreen.r * 1.1 && uniforms.uEntry.value >= 1 },
+    heroDragStart() { heroRot.dragging = true; heroRot.vx = heroRot.vy = 0; heroRot.last = performance.now() },
+    heroDrag(dx, dy) {
+      const t = performance.now(), dts = Math.max(8, t - heroRot.last) / 1000
+      const ay = dx * 0.009, ax = dy * 0.007
+      heroRot.y += ay; heroRot.x += ax
+      heroRot.vy = MathUtils.clamp(ay / dts, -6, 6); heroRot.vx = MathUtils.clamp(ax / dts, -6, 6)
+      heroRot.last = t
+      if (Math.abs(dx) + Math.abs(dy) > 1) hero.held = true
+    },
+    heroDragEnd() { heroRot.dragging = false; if (performance.now() - heroRot.last > 80) heroRot.vx = heroRot.vy = 0 },
     setEntry(v) { uniforms.uEntry.value = v; if (intro) intro.t = intro.dur * v }, // debug: scrub the butterfly's arrival
     get settled() { return Math.abs(sample(scrollY).morph - cur.morph) < 0.02 },
-    get debug() { return { focus: uniforms.uFocusAmt.value, focusTarget, morph: cur.morph, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
+    get debug() { return { hero: { ...hero, rot: { ...heroRot } }, focus: uniforms.uFocusAmt.value, focusTarget, morph: cur.morph, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
   }
 }

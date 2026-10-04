@@ -245,6 +245,7 @@ async function boot() {
           scramble(el)
         },
         onFrame: (s) => audio.update(s),
+        heroArrows: [$('.hero-arrow--prev'), $('.hero-arrow--next')],
       })
       api.setVisitor(visitor)
       if (/[?&]debug\b/.test(location.search)) window.__scene = api
@@ -307,6 +308,33 @@ function initInteractions() {
   }
   skills.forEach((btn) => btn.addEventListener('click', () => select(btn.classList.contains('is-focus') ? null : btn)))
   detail.addEventListener('click', (e) => { const b = e.target.closest('[data-goto]'); if (b) goTo(b.dataset.goto) })
+
+  // Intro form: the arrows (and ← →) step through the forms; dragging the form turns it, and a
+  // turned form stays put until the visitor steps on
+  $$('[data-hero-step]').forEach((b) => b.addEventListener('click', () => api?.heroStep(+b.dataset.heroStep)))
+  addEventListener('keydown', (e) => {
+    if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.metaKey || e.ctrlKey) return
+    if (scrollY > innerHeight * 0.5 || e.target.closest('input, textarea, select, [contenteditable]')) return
+    api?.heroStep(e.key === 'ArrowLeft' ? -1 : 1)
+  })
+  let turning = false, hx = 0, hy = 0
+  addEventListener('pointerdown', (e) => {
+    if (!api || e.button > 0 || scrollY > innerHeight * 0.5 || e.target.closest('a, button, input, textarea, select, label, dialog')) return
+    if (!api.overHero(e.clientX, e.clientY)) return
+    turning = true; hx = e.clientX; hy = e.clientY
+    api.heroDragStart()
+    root.classList.add('is-dragging', 'is-turning')
+  })
+  addEventListener('pointermove', (e) => {
+    if (turning) {
+      // on touch only sideways drags turn it, so the page still scrolls
+      api.heroDrag(e.clientX - hx, e.pointerType === 'touch' ? 0 : e.clientY - hy)
+      hx = e.clientX; hy = e.clientY
+    } else if (api && e.pointerType === 'mouse') root.classList.toggle('over-hero', scrollY < innerHeight * 0.5 && api.overHero(e.clientX, e.clientY))
+  }, { passive: true })
+  const endTurn = () => { if (!turning) return; turning = false; api.heroDragEnd(); root.classList.remove('is-dragging', 'is-turning') }
+  addEventListener('pointerup', endTurn)
+  addEventListener('pointercancel', endTurn)
 
   // Drag to rotate the lattice / globe — follows the pointer, coasts on release
   let dragging = false, lx = 0, ly = 0
