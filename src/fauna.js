@@ -1,8 +1,8 @@
-// Realistic particle sculptures of the intro animals.
+// The sculpting toolkit for the intro forms, and the blue morpho butterfly that opens them.
 //
-// Bodies are sculpted as signed distance fields (smoothly blended ellipsoids and round cones, the
-// same technique used for SDF character art), sampled on their surface and lit with a fixed key
-// light baked into each particle. Wings, feathers and fins are built as explicit thin geometry.
+// Organic forms are sculpted as signed distance fields (smoothly blended ellipsoids and round
+// cones, the same technique used for SDF character art), sampled on their surface and lit with a
+// fixed key light baked into each particle. Wings and other thin parts are explicit geometry.
 //
 // Output matches hero.js: { pos, order } with order = (tint + shade, a, b, part), where the
 // fractional part of the first value is baked lighting (0.02 … 0.98; an integer means unlit).
@@ -51,18 +51,6 @@ export function setView(x = 0, y = 0, z = 0) {
     ;[b, c] = [b * cs - c * sn, b * sn + c * cs]
     cs = Math.cos(y); sn = Math.sin(y)
     ;[a, c] = [a * cs + c * sn, -a * sn + c * cs]
-    cs = Math.cos(z); sn = Math.sin(z)
-    ;[a, b] = [a * cs - b * sn, a * sn + b * cs]
-    return [a, b, c]
-  }
-}
-// the same, turned first about y (heading), then x (tilt towards the camera): rotZ(rotX(rotY(p, y), x), z)
-export function setViewYX(y = 0, x = 0, z = 0) {
-  VIEW = (v) => {
-    let [a, b, c] = v, cs = Math.cos(y), sn = Math.sin(y)
-    ;[a, c] = [a * cs + c * sn, -a * sn + c * cs]
-    cs = Math.cos(x); sn = Math.sin(x)
-    ;[b, c] = [b * cs - c * sn, b * sn + c * cs]
     cs = Math.cos(z); sn = Math.sin(z)
     ;[a, b] = [a * cs - b * sn, a * sn + b * cs]
     return [a, b, c]
@@ -163,6 +151,23 @@ export function makeSculpt(prims, k = 0.08) {
   return { dist, grad, sample, project, occl }
 }
 
+// open Catmull-Rom through 3D points: t in [0, 1] → point
+export function curve(pts) {
+  const n = pts.length - 1
+  return (t) => {
+    const f = clamp(t, 0, 1) * n, i = Math.min(n - 1, Math.floor(f)), u = f - i
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(n, i + 2)]
+    const u2 = u * u, u3 = u2 * u
+    return [0, 1, 2].map((j) => 0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * u + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * u2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * u3))
+  }
+}
+export const tangent = (c, t) => norm(sub(c(Math.min(1, t + 0.01)), c(Math.max(0, t - 0.01))))
+export function frame(tn) {
+  const ref = Math.abs(tn[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]
+  const e1 = norm(cross(tn, ref))
+  return [e1, cross(tn, e1)]
+}
+
 // fill `n` particles from weighted part generators; each returns [x, y, z, o0, o1, o2, o3]
 export function build(n, seed, parts) {
   const r = rng(seed)
@@ -173,8 +178,8 @@ export function build(n, seed, parts) {
     const count = k === parts.length - 1 ? n - i : Math.round((w / total) * n)
     for (let c = 0; c < count && i < n; c++, i++) {
       const v = fn(r, c)
-      pos.set(v.slice(0, 3), i * 3)
-      order.set(v.slice(3, 7), i * 4)
+      pos[i * 3] = v[0]; pos[i * 3 + 1] = v[1]; pos[i * 3 + 2] = v[2]
+      order[i * 4] = v[3]; order[i * 4 + 1] = v[4]; order[i * 4 + 2] = v[5]; order[i * 4 + 3] = v[6]
     }
   })
   for (let a = n - 1; a > 0; a--) { // shuffle so any prefix is an even sample (quality tiers)
@@ -183,118 +188,6 @@ export function build(n, seed, parts) {
     for (let k = 0; k < 4; k++) { const t = order[a * 4 + k]; order[a * 4 + k] = order[b * 4 + k]; order[b * 4 + k] = t }
   }
   return { pos, order }
-}
-
-/* A feather: base, direction and up vector, length, half-width, curl. Returns a point on it
-   (shaft or vane, with a crisp outline) and a normal for lighting. */
-export function feather(r, base, dir, up, L, W, o = {}) {
-  const side = norm(cross(dir, up))
-  const t = Math.pow(r(), o.tipBias ?? 0.85)
-  const q = r()
-  const prof = Math.pow(Math.sin(Math.PI * Math.min(1, 0.08 + t * 0.95)), 0.6) * (1 - t * (o.taper ?? 0.25))
-  const asym = o.asym ?? 0 // outer vane narrower on flight feathers
-  let u
-  if (q < 0.14) u = gauss(r) * 0.08 // shaft
-  else if (q < 0.4) u = r() < 0.5 ? -1 : 1 // outline
-  else u = r() * 2 - 1
-  const w = W * prof * (u > 0 ? 1 - asym : 1 + asym * 0.5)
-  const curl = (o.curl ?? 0) * t * t * t + (o.camber ?? 0.02) * Math.sin(Math.PI * t) - Math.abs(u) * 0.012
-  const p = add(add(add(base, mul(dir, t * L)), mul(side, u * w)), mul(up, curl))
-  return { p, n: norm(add(up, mul(side, -u * 0.25))), t, edge: Math.abs(u) > 0.92 || q < 0.14 }
-}
-
-/* ============================================================================================
-   GOLDEN EAGLE — Aquila chrysaetos, soaring. x = span, y = up, z = forward (head at +z).
-   Shown from above and in front, heading left, so the broad wings read face-on: golden crown
-   and nape, dark brown plumage with tawny coverts, the white wing patches and white-based tail
-   of a young bird, and seven splayed primaries ("fingers") on each wing.
-   Wing particles: order = (tint+shade, span 0…1, side ±1, part 1). Tail: part 11.
-   ========================================================================================== */
-export const EAGLE_VIEW = { yaw: -1.0, tilt: 0.5, roll: -0.15 } // rotZ(rotX(rotY(p, yaw), tilt), roll)
-export function eagle(n) {
-  setViewYX(EAGLE_VIEW.yaw, EAGLE_VIEW.tilt, EAGLE_VIEW.roll)
-  const body = makeSculpt([
-    { e: [[0, 0, -0.02], [0.25, 0.2, 0.52]] }, // torso
-    { e: [[0, -0.04, 0.22], [0.24, 0.21, 0.32]] }, // deep breast
-    { e: [[0, 0.07, 0.12], [0.2, 0.1, 0.3]], k: 0.08 }, // mantle between the wings
-    { c: [[0, 0.04, 0.4], [0, 0.11, 0.62], 0.16, 0.12] }, // neck
-    { e: [[0, 0.14, 0.72], [0.135, 0.13, 0.17]], tag: 'head' },
-    { e: [[0, 0.2, 0.74], [0.11, 0.05, 0.11]], k: 0.05, tag: 'head' }, // heavy brow
-    { e: [[0, 0.12, 0.84], [0.06, 0.055, 0.05]], k: 0.03, tag: 'cere' },
-    { c: [[0, 0.13, 0.86], [0, 0.11, 0.97], 0.05, 0.032], k: 0.025, tag: 'beak' },
-    { c: [[0, 0.11, 0.97], [0, 0.04, 1.0], 0.032, 0.008], k: 0.02, tag: 'beak' }, // hooked tip
-    { c: [[0, 0.0, -0.42], [0, 0.03, -0.62], 0.15, 0.09] }, // tail base
-    { c: [[0.08, -0.14, -0.1], [0.07, -0.2, -0.42], 0.065, 0.045], tag: 'leg' }, // feathered legs, tucked
-    { c: [[-0.08, -0.14, -0.1], [-0.07, -0.2, -0.42], 0.065, 0.045], tag: 'leg' },
-    { c: [[0.07, -0.2, -0.42], [0.06, -0.24, -0.5], 0.04, 0.02], tag: 'foot' },
-    { c: [[-0.07, -0.2, -0.42], [-0.06, -0.24, -0.5], 0.04, 0.02], tag: 'foot' },
-  ], 0.1)
-
-  // wing skeleton per side: shoulder → elbow → wrist → hand, held in a shallow soaring dihedral
-  const bone = (s) => {
-    const pts = [[0.17, 0.07, 0.15], [0.64, 0.14, 0.23], [1.1, 0.22, 0.25], [1.48, 0.28, 0.14]]
-    const f = clamp(s, 0, 1) * 3, k = Math.min(2, Math.floor(f))
-    return mix3(pts[k], pts[k + 1], f - k)
-  }
-  const UP = [0, 1, 0]
-  const mirror = (p, side) => [p[0] * side, p[1], p[2]]
-  const lit = (nn, extra = 0) => shadeOf(nn, extra) * 0.82 + 0.16 // plumage is matte: keep the shadows open
-
-  return build(n, 401, [
-    [15, (r) => { // body plumage: dark brown with tawny edging, golden crown and nape
-      const { p, n: nn, tag, ao } = body.sample(r)
-      const sh = lit(nn) * lerp(0.45, 1, ao)
-      if (tag === 'beak') return [...p, T(3, sh * 0.7), -1, -1, 0]
-      if (tag === 'cere' || tag === 'foot') return [...p, T(1, sh), -1, -1, 0]
-      const streak = fbm([p[0] * 20, p[1] * 20, p[2] * 7]) // feather texture
-      const nape = sstep(0.42, 0.66, p[2]) * sstep(0.02, 0.12, p[1]) // the golden hackles
-      if (nape > 0.4 && streak > 0.3 - nape * 0.25) return [...p, T(nape > 0.75 && streak > 0.55 ? 1 : 0, sh * (0.85 + streak * 0.3)), -1, -1, 0]
-      return [...p, T(streak > 0.6 ? 0 : 3, sh * (0.85 + streak * 0.35)), -1, -1, 0]
-    }],
-    [0.35, (r, i) => { const side = i % 2 ? 1 : -1; return [side * 0.09 + gauss(r) * 0.006, 0.17 + gauss(r) * 0.006, 0.83, T(4, 0.85), -1, -1, 0] }], // eyes
-    [17, (r) => { // secondaries: 16 per wing along the forearm; a bulging, serrated trailing edge
-      const side = r() < 0.5 ? -1 : 1, k = Math.floor(r() * 16), s = 0.03 + (k / 15) * 0.66
-      const b = bone(s), dir = norm([0.04 + s * 0.14, -0.03, -1])
-      const L = 0.6 + 0.22 * sstep(0, 0.35, s) - 0.08 * sstep(0.5, 0.7, s) // pinched in at the body
-      const f = feather(r, b, dir, UP, L, 0.08, { asym: 0.1, camber: 0.035 })
-      const p = mirror(f.p, side), nn = mirror(f.n, side)
-      const patch = s > 0.55 && f.t > 0.12 && f.t < 0.4 // white patch at the base of the flight feathers
-      const dark = f.t > 0.8 ? 0.7 : 1 // dusky trailing edge
-      return [...p, T(patch ? 2 : 3, lit(nn, f.edge ? 0.2 : 0) * (1.05 - f.t * 0.3) * (patch ? 0.55 : dark)), s * 0.72, side, 1]
-    }],
-    [17, (r) => { // primaries: ten per wing fanning from the hand; the outer seven splay into fingers
-      const side = r() < 0.5 ? -1 : 1, k = Math.floor(r() * 10)
-      const s = 0.7 + k * 0.03, b = bone(s)
-      const ang = lerp(-1.2, 0.12, k / 9) // swept back → pointing out and a little forward
-      const dir = norm([Math.cos(ang), 0.03 + k * 0.014, Math.sin(ang) - 0.22])
-      const finger = k > 2
-      const f = feather(r, b, dir, UP, 0.74 + Math.sin((k / 9) * Math.PI) * 0.3, finger ? 0.05 : 0.075,
-        { asym: 0.35, curl: finger ? 0.2 : 0.06, taper: finger ? 0.55 : 0.4 })
-      const p = mirror(f.p, side), nn = mirror(f.n, side)
-      const patch = f.t > 0.08 && f.t < 0.3 && k < 6
-      const dark = f.t > 0.6 ? 0.72 : 1 // dusky fingertips
-      return [...p, T(patch ? 2 : 3, lit(nn, f.edge ? 0.26 : 0.04) * (1.05 - f.t * 0.25) * (patch ? 0.55 : dark)), 0.72 + f.t * 0.28, side, 1]
-    }],
-    [16, (r) => { // coverts: three overlapping rows over the arm; the lesser coverts are tawny gold
-      const side = r() < 0.5 ? -1 : 1, row = Math.floor(r() * 3), s = r() * 0.96
-      const b = add(bone(s), [0, 0.022 + row * 0.014, -0.02 - row * 0.12])
-      const f = feather(r, b, norm([0.1, -0.03, -1]), UP, 0.3 - row * 0.04, 0.062, { camber: 0.015 })
-      const p = mirror(f.p, side), nn = mirror(f.n, side)
-      const tawny = row === 0 || (row === 1 && fbm([p[0] * 9, 0, p[2] * 9]) > 0.5)
-      return [...p, T(tawny ? 0 : 3, lit(nn, f.edge ? 0.22 : 0.06)), s * 0.8, side, 1]
-    }],
-    [5, (r) => { // leading edge (patagium): a smooth, golden-lit rounded edge
-      const side = r() < 0.5 ? -1 : 1, s = r() * 0.96, b = bone(s), a = r() * TAU
-      const p = mirror(add(b, [0, Math.cos(a) * 0.04, 0.025 + Math.sin(a) * 0.04]), side)
-      return [...p, T(0, lit(norm([0, Math.cos(a), Math.sin(a)]), 0.1)), s * 0.8, side, 1]
-    }],
-    [9, (r) => { // tail: twelve rectrices fanned, white at the base with a broad dark terminal band
-      const k = Math.floor(r() * 12), ang = lerp(-0.45, 0.45, k / 11)
-      const base = [Math.sin(ang) * 0.06, 0.02, -0.55]
-      const f = feather(r, base, norm([Math.sin(ang), 0.02, -Math.cos(ang)]), UP, 0.6, 0.075, { camber: 0.02 })
-      return [...f.p, T(f.t < 0.5 ? 2 : 3, lit(f.n, f.edge ? 0.2 : 0) * (f.t < 0.5 ? 0.5 : f.t > 0.85 ? 0.7 : 1)), f.t, -1, 11]
-    }],
-  ])
 }
 
 /* ============================================================================================

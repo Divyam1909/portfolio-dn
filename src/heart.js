@@ -8,7 +8,7 @@
 
 import { gauss } from './shapes.js'
 import { TAU, lerp, sub, add, mul, len, norm, fbm, setView, shadeOf, T, makeSculpt, build } from './fauna.js'
-import { curve } from './mammals.js'
+import { curve } from './fauna.js'
 
 const SCALE = 1.25, SHIFT = -0.1
 export const HEART_CENTRES = { ventricles: [0.2, -0.5, 0], atria: [-0.25, 0.37, -0.19] } // after SHIFT and SCALE

@@ -1,15 +1,16 @@
-// The intro model cycles through seven forms. Each generator returns { pos, order } like shapes.js,
+// The intro model cycles through fifteen forms. Each generator returns { pos, order } like shapes.js,
 // with order = (tint, a, b, part):
 //   tint  0 primary colour · 1 secondary colour · 2 neutral (silver/white) · 3 dark · 4 glowing accent · 5 black
-//   (the sculpts in fauna.js, mammals.js, heart.js and brain.js add baked lighting as the fractional part of the tint)
+//   (the forms in fauna.js, heart.js, brain.js, objects.js and creatures.js add baked lighting as the fractional part of the tint)
 //   part  animation group read by the shader (see heroAnim in scene.js); a/b are its parameters.
 // All forms are built upright and untilted, roughly within a radius of 2.1.
 
 import { compose, gauss, neuralSphere } from './shapes.js'
-import { eagle, butterfly } from './fauna.js'
-import { squirrel } from './mammals.js'
+import { butterfly } from './fauna.js'
 import { heart } from './heart.js'
 import { brain } from './brain.js'
+import { atom, blackHole, gears, hourglass, tesseract, wormhole, turntable } from './objects.js'
+import { jellyfish, samurai, dragon } from './creatures.js'
 
 const TAU = Math.PI * 2
 const lerp = (a, b, t) => a + (b - a) * t
@@ -71,17 +72,25 @@ export function neural(n) {
 }
 
 // Slots (the shader's heroAnim/heroTint switch on these indices)
-export const HERO_SHAPES = [eagle, rocket, neural, squirrel, heart, brain, butterfly]
-export const HERO_NAMES = ['Golden eagle', 'Rocket', 'Neural sphere', 'Red squirrel', 'Heart', 'Brain', 'Butterfly']
+export const HERO_SHAPES = [butterfly, rocket, neural, heart, brain, atom, blackHole, gears, hourglass, tesseract, wormhole, turntable, jellyfish, samurai, dragon]
+export const HERO_NAMES = ['Butterfly', 'Rocket', 'Neural sphere', 'Heart', 'Brain', 'Atom', 'Black hole', 'Gears', 'Hourglass', 'Tesseract', 'Wormhole', 'Turntable', 'Jellyfish', 'Samurai', 'Dragon']
 // [primary, secondary] colour per form; the primary one also tints the aura behind it
 export const HERO_COLORS = [
-  ['#e8a93c', '#ffd35a'], // golden eagle: gold plumage, yellow beak and feet
+  ['#2d8cff', '#7fe3ff'], // butterfly: blue morpho with a cyan sheen
   ['#ff7a2f', '#e8384f'], // rocket: flame orange, red trim
   ['#c8ff4d', '#8fb3ff'], // neural sphere: signature lime
-  ['#c9612b', '#e8c49a'], // red squirrel: russet, cream hazelnut and hair tips
   ['#e3263f', '#4a78ff'], // heart: crimson muscle and arteries, blue veins
   ['#f08fa8', '#8fe3ff'], // brain: rosy cortex, cyan firing neurons
-  ['#2d8cff', '#7fe3ff'], // butterfly: blue morpho with a cyan sheen
+  ['#ff6b5e', '#6fd8ff'], // atom: warm protons, cyan neutrons, orbits and electrons
+  ['#ff8a2a', '#ffd9a0'], // black hole: orange disk, white-hot inner edge
+  ['#e2a64a', '#e07a4a'], // gears: brass and copper (steel is the neutral)
+  ['#d29a5a', '#ffd38a'], // hourglass: turned brass frame, golden sand
+  ['#4ff0ff', '#b57bff'], // tesseract: cyan cubes, violet edges through the fourth dimension
+  ['#9b7bff', '#5ef2ff'], // wormhole: violet space grid, cyan light
+  ['#e0a060', '#ff4d6d'], // turntable: warm plinth, red label and notes
+  ['#9a8cff', '#ff8ad8'], // jellyfish: lavender bell, pink arms and gonads
+  ['#d8283a', '#f2c14e'], // samurai: red lacquer, gold
+  ['#e8433a', '#ffc94a'], // dragon: red scales, golden belly, spines and horns
 ]
-// the order they appear in: the eagle opens, the brain follows the heart
-export const HERO_SEQUENCE = [0, 1, 3, 2, 6, 4, 5]
+// the order they appear in: the butterfly flies in and opens, the brain follows the heart
+export const HERO_SEQUENCE = [0, 5, 12, 7, 6, 14, 9, 8, 1, 13, 10, 11, 2, 3, 4]
