@@ -13,8 +13,9 @@ import {
   PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT, CART_ROT, MEGA_ROT, AQUA_ROT, AQUA, BIO_ROT, ROBOT,
 } from './shapes.js'
 import { HERO_SHAPES, HERO_COLORS, HERO_NAMES, HERO_SEQUENCE } from './hero.js'
-import { CHEETAH_LEGS, CHEETAH_X } from './mammals.js'
+import { BRAIN_Z, BRAIN_VIEW } from './brain.js'
 import { HEART_CENTRES } from './heart.js'
+import { EAGLE_VIEW } from './fauna.js'
 
 const PI = Math.PI
 const DEG = PI / 180
@@ -275,13 +276,9 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
   return p;
 }
 
-// ---- Intro forms: eagle, rocket, neural sphere, transformer, whale, tiger, butterfly (hero.js, fauna.js)
+// ---- Intro forms: eagle, rocket, neural sphere, squirrel, heart, brain, butterfly (hero.js and its sculpts)
 vec3 bez(vec3 a, vec3 b, vec3 c, float t){ return mix(mix(a, b, t), mix(b, c, t), t); }
 vec2 rot2(vec2 q, float a){ float c = cos(a), s = sin(a); return vec2(q.x * c - q.y * s, q.x * s + q.y * c); }
-vec2 cheetahPivot(int i){ // shoulder/hip of each cheetah leg
-  ${CHEETAH_LEGS.map(([j], i) => `if(i == ${i}) return vec2(${(j[0][0] - CHEETAH_X).toFixed(3)}, ${j[0][1].toFixed(3)});`).join('\n  ')}
-  return vec2(0.);
-}
 const vec3 HEART_V = vec3(${HEART_CENTRES.ventricles.map((v) => v.toFixed(3)).join(', ')});
 const vec3 HEART_A = vec3(${HEART_CENTRES.atria.map((v) => v.toFixed(3)).join(', ')});
 
@@ -299,7 +296,7 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
       p.xy = rot2(p.xy - vec2(side * 0.16, 0.06), th) + vec2(side * 0.16, 0.06);
     }
     if(part > 10.5 && part < 11.5) p.x += sin(uTime * 0.9) * 0.04 * o.y;
-    vec3 rest = rotZ(rotY(rotX(p, -0.55), 0.35 + sin(uTime * 0.3) * 0.12), 0.2 + sin(uTime * 0.45) * 0.08)
+    vec3 rest = rotZ(rotX(rotY(p, ${EAGLE_VIEW.yaw.toFixed(3)} + sin(uTime * 0.3) * 0.1), ${EAGLE_VIEW.tilt.toFixed(3)}), ${EAGLE_VIEW.roll.toFixed(3)} + sin(uTime * 0.45) * 0.07)
               + vec3(0., sin(uTime * 1.1) * 0.05, 0.);
     if(uEntry >= 1.) return rest;
     // arrival: sweeps in from far behind, banking through a curve, then settles into the glide.
@@ -307,9 +304,9 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
     float lag = step(0.7, aRnd.y) * aRnd.z * 0.075;
     float t = clamp(uEntry * 1.08 - lag, 0., 1.);
     float et = 1. - pow(1. - t, 2.2);
-    vec3 A = vec3(9., 5.5, -24.), B = vec3(-7.5, 2.2, -2.5), C = vec3(0.);
+    vec3 A = vec3(-9., 5.5, -24.), B = vec3(7.5, 2.2, -2.5), C = vec3(0.); // swings round to head left
     vec3 v = normalize(mix(B - A, C - B, et) + vec3(0., 0., 1e-3));
-    float yaw = atan(v.x, v.z), pitch = -atan(v.y, length(v.xz)), bank = sin(PI * et) * 0.95;
+    float yaw = atan(v.x, v.z), pitch = -atan(v.y, length(v.xz)), bank = -sin(PI * et) * 0.95;
     vec3 fly = rotY(rotX(rotZ(p, bank), pitch), yaw) + bez(A, B, C, et);
     glow += lag * 6.;
     return mix(fly, rest, smoothstep(0.84, 1., t));
@@ -325,54 +322,7 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
     return rotZ(rotY(p, uTime * 0.7), -0.3) + vec3(0., sin(uTime * 1.3) * 0.06, 0.);
   }
   if(h == 2) return rotY(p, uSpin);
-  if(h == 3) return rotY(p, -0.5 + sin(uTime * 0.4) * 0.25); // transformer
-  if(h == 4){ // blue whale: the body undulates to the flukes, the blowhole spouts
-    if(part > 2.5 && part < 3.5) p.y += sin(uTime * 1.3 - o.y * 3.6) * 0.2 * pow(1. - o.y, 2.4);
-    if(part > 8.5){
-      float t = fract(o.y + uTime * 0.45), sp = t * 0.38;
-      p += vec3(cos(o.z) * sp, t * 1.05 - t * t * 0.35, sin(o.z) * sp);
-      alpha *= 1. - t; glow += 0.5;
-    }
-    return rotZ(rotY(rotX(p, 0.18), -0.55 + sin(uTime * 0.2) * 0.1), 0.04) + vec3(0., sin(uTime * 0.8) * 0.06, 0.);
-  }
-  if(h == 5 || h == 7){ // tiger, red fox: a slow walk (diagonal legs in step), swishing tail
-    float w = uTime * (h == 5 ? 2.1 : 2.5);
-    if(part > 11.5 && part < 15.5){
-      float li = part - 12.;
-      float ph = (li < 0.5 || li > 2.5) ? 0. : PI;
-      float lift = max(0., sin(w + ph + 1.2)) * 0.05; // paws lift on the forward swing
-      p.xy = rot2(p.xy - o.yz, (h == 5 ? 0.26 : 0.3) * sin(w + ph)) + o.yz;
-      p.y += lift * smoothstep(-0.2, -0.8, p.y);
-    }
-    if(part > 4.5 && part < 5.5){
-      if(h == 5){ p.z += sin(uTime * 1.6 + o.y * 2.) * 0.22 * o.y; p.y += sin(uTime * 1.1) * 0.06 * o.y; }
-      else { p.z += sin(uTime * 1.2 + o.y * 1.6) * 0.14 * o.y; p.y += sin(uTime * 0.9) * 0.05 * o.y; }
-    }
-    p.y += sin(w * 2.) * 0.012;
-    return h == 5 ? rotY(rotX(p, 0.12), -0.45 + sin(uTime * 0.25) * 0.1) : rotY(rotX(p, 0.1), -0.5 + sin(uTime * 0.25) * 0.12);
-  }
-  if(h == 8){ // cheetah: a slow-motion rotary gallop; each leg swings from the shoulder/hip and folds at the knee
-    float s = uTime * 4.2;
-    if(part > 11.5 && part < 19.5){
-      float li = mod(part - 12., 4.);
-      float rear = step(1.5, li);
-      float ph = rear * PI + (mod(li, 2.) > 0.5 ? 0.45 : 0.);
-      float th = mix(0.62, 0.55, rear) * sin(s + ph);
-      if(part > 15.5) p.xy = rot2(p.xy - o.yz, -1.05 * max(0., cos(s + ph))) + o.yz; // tuck during the forward swing
-      vec2 pv = cheetahPivot(int(li + 0.5));
-      p.xy = rot2(p.xy - pv, th) + pv;
-    }
-    if(part > 4.5 && part < 5.5){ p.y += sin(s + 1.2) * 0.1 * o.y * o.y; p.z += sin(uTime * 0.9) * 0.08 * o.y; }
-    if(part > 20.5 && part < 21.5){ // dust kicked back from the paws
-      float t = fract(o.y + uTime * 0.8);
-      p = vec3(0.7 - t * 2.8, -0.98 + t * (0.1 + o.z * 0.25) - t * t * 0.1, p.z * (1. + t));
-      alpha *= sin(PI * t) * 0.7;
-    }
-    p.y += sin(2. * s) * 0.035;
-    p = rotZ(p, sin(s + 0.6) * 0.035);
-    return rotY(rotX(p, 0.08), -0.32 + sin(uTime * 0.2) * 0.08);
-  }
-  if(h == 9){ // red squirrel: nibbles the nut in bursts, tail sways, breathes
+  if(h == 3){ // red squirrel: nibbles the nut in bursts, tail sways, breathes
     float burst = step(0.2, sin(uTime * 0.9));
     float nib = (0.5 + 0.5 * sin(uTime * 11.)) * burst;
     if(part > 21.5 && part < 22.5) p.xy = rot2(p.xy - o.yz, -0.045 * nib + 0.05 * sin(uTime * 0.45)) + o.yz;
@@ -381,7 +331,7 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
     p.y += sin(uTime * 2.4) * 0.008;
     return rotY(rotX(p, 0.05), -0.55 + sin(uTime * 0.3) * 0.15);
   }
-  if(h == 10){ // heart: lub-dub at ~66 bpm. Atria squeeze, then the ventricles; the arteries pulse
+  if(h == 4){ // heart: lub-dub at ~66 bpm. Atria squeeze, then the ventricles; the arteries pulse
     float bt = fract(uTime * 1.1);
     float atr = exp(-pow((bt - 0.06) / 0.05, 2.));
     float ven = smoothstep(0.1, 0.2, bt) * (1. - smoothstep(0.32, 0.55, bt));
@@ -389,6 +339,19 @@ vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
     else if(o.y < 1.5){ vec3 c = HEART_A; p = c + (p - c) * (1. - 0.07 * atr); }
     else { glow += ven * 0.25; p = p * (1. + 0.015 * ven); } // the arteries swell with each beat
     return rotY(rotX(p, 0.05), 0.1 + sin(uTime * 0.35) * 0.4);
+  }
+  if(h == 5){ // brain: waves of activity sweep front to back over the gyri, neurons spark
+    float zf = (p.z - ${BRAIN_Z[0].toFixed(3)}) / ${(BRAIN_Z[1] - BRAIN_Z[0]).toFixed(3)};
+    float wave = exp(-pow((fract(uTime * 0.22) * 1.6 - 0.3 - (1. - zf)) / 0.08, 2.));
+    if(part > 23.5 && part < 24.5) glow += wave * (0.25 + 0.5 * o.y);
+    if(part > 24.5 && part < 25.5){
+      float f = fract(o.y * 7.31 + uTime * (0.35 + o.y * 0.4));
+      float spark = exp(-f * 14.);
+      alpha *= 0.15 + spark * 1.4 + wave * 0.6;
+      glow += spark * 1.3 + wave * 0.4;
+    }
+    p *= 1. + 0.01 * sin(uTime * 1.2);
+    return rotY(rotX(p, ${BRAIN_VIEW[0].toFixed(3)}), ${BRAIN_VIEW[1].toFixed(3)} + sin(uTime * 0.3) * 0.3);
   }
   // butterfly: wings flap
   if(part > 5.5 && part < 6.5){
