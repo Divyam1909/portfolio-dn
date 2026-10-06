@@ -10,7 +10,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import {
   SHAPES, rng, LEAF_BASE, BOOK, LATTICE_NODES, PROJECT_NODES, latLon, arcPoint, HOME, GLOBE_R, HELIX,
-  PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT, CART_ROT, MEGA_ROT, AQUA_ROT, AQUA, BIO_ROT, ROBOT,
+  PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT, CART_ROT, MEGA_ROT, AQUA_ROT, AQUA, BIO_ROT, ROBOT, OBS_ROT, OBS, SAE_ROT, SAE,
 } from './shapes.js'
 import { HERO_SHAPES, HERO_COLORS, HERO_NAMES, HERO_SEQUENCE } from './hero.js'
 import { CHEETAH_LEGS, CHEETAH_X } from './mammals.js'
@@ -20,7 +20,7 @@ const PI = Math.PI
 const DEG = PI / 180
 const JOURNEY = SHAPES.length
 // shape indices, in page order
-const S = { HELIX: 2, PIPE: 3, STACK: 4, CHIP: 5, CART: 6, MEGA: 7, CANDLES: 8, LEAF: 9, BOOK: 10, WAVES: 11, SOLAR: 12, LATTICE: 13, GLOBE: 14 }
+const S = { HELIX: 2, PIPE: 3, STACK: 4, CHIP: 5, CART: 6, MEGA: 7, OBS: 8, SAE: 9, CANDLES: 10, LEAF: 11, BOOK: 12, WAVES: 13, SOLAR: 14, LATTICE: 15, GLOBE: 16 }
 const tiltFn = (name, r) => `vec3 ${name}(vec3 p){ return rotZ(rotY(rotX(p, ${r[0].toFixed(3)}), ${r[1].toFixed(3)}), ${r[2].toFixed(3)}); }`
 const GLOBE_TILT = HOME.lat * DEG - 0.12 // brings home (Thane) up towards the visible top of the globe
 
@@ -103,6 +103,11 @@ ${tiltFn('cartTilt', CART_ROT)}
 ${tiltFn('megaTilt', MEGA_ROT)}
 ${tiltFn('aquaTilt', AQUA_ROT)}
 ${tiltFn('bioTilt', BIO_ROT)}
+${tiltFn('obsTilt', OBS_ROT)}
+${tiltFn('saeTilt', SAE_ROT)}
+vec2 rot2(vec2 q, float a){ float c = cos(a), s = sin(a); return vec2(q.x * c - q.y * s, q.x * s + q.y * c); }
+const float OBS_X0 = ${OBS.X0.toFixed(3)}, OBS_W = ${OBS.W.toFixed(3)};
+vec3 saeFeat(float k){ return vec3(${SAE.GRID_X.toFixed(3)}, -0.86 + floor(k / 4. + 0.01) * 0.245, -0.45 + mod(k + 0.01, 4.) * 0.3); }
 const vec3 EYE0 = vec3(${ROBOT.EYES[0].map((v) => v.toFixed(3)).join(',')});
 const vec3 EYE1 = vec3(${ROBOT.EYES[1].map((v) => v.toFixed(3)).join(',')});
 // a player's drift around their base position on the pitch
@@ -212,6 +217,57 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
     }
     return aquaTilt(p);
   }
+  if(i==${S.OBS}){
+    // LLM Observatory: calls stream in from the SDK sources, land as spans; a scan line sweeps the trace
+    float scan = fract(uTime * 0.28);
+    if(o.w > 3.5){ glow += 0.5 + 0.5 * sin(uTime * 3. + o.x * 2.1); return p; }
+    if(o.w > 2.5){
+      float t = fract(o.x + uTime * 0.3);
+      vec3 a = vec3(${OBS.SRC_X.toFixed(3)}, 0.62 - o.y * 0.62, 0.);
+      vec3 b = vec3(OBS_X0 - 0.04, ${OBS.ROW0.toFixed(3)} - o.z * ${OBS.DY.toFixed(3)}, 0.);
+      vec3 q = mix(a, b, t) + vec3(0., 0., sin(PI * t) * 0.18) + (aRnd.xyz - 0.5) * 0.03;
+      alpha *= smoothstep(0., 0.08, t) * smoothstep(1., 0.85, t);
+      glow += 0.5;
+      return obsTilt(q);
+    }
+    if(o.w > 1.5){
+      float u = o.x;
+      float y = 0.76 + 0.07 * sin(u * 23. - uTime * 2.2) * (0.5 + 0.5 * sin(u * 5. + uTime * 0.7));
+      y += 0.16 * exp(-pow((u - 0.6) * 22., 2.)) * (0.6 + 0.4 * sin(uTime * 2.4)); // the latency spike of the incident
+      glow += 0.25 + 1.1 * smoothstep(0.05, 0., abs(u - scan));
+      return obsTilt(vec3(OBS_X0 + u * OBS_W, y, 0.01));
+    }
+    if(o.w > 0.5){
+      glow += 1.3 * smoothstep(0.05, 0., abs(o.x - scan));
+      if(abs(o.y - ${OBS.INCIDENT}.) < 0.5) glow += 0.4 + 0.9 * step(0.5, fract(uTime * 1.1));
+      else if(o.y < 0.5) glow += 0.15;
+    }
+    return p;
+  }
+  if(i==${S.SAE}){
+    // BiasLens: activations fan into the sparse feature grid; a few bias features fire, the probe reads them, the balance tips
+    float tip = 0.17 * sin(uTime * 0.8);
+    if(o.w > 3.5){ glow += 0.7 + 0.6 * abs(sin(uTime * 0.8)); return p; }
+    if(o.w > 2.5){
+      vec2 pv = vec2(${SAE.PIVOT[0].toFixed(3)}, ${SAE.PIVOT[1].toFixed(3)});
+      vec2 q = o.x < 0.5 ? pv + rot2(o.yz, tip) : pv + rot2(vec2(o.x < 1.5 ? -${SAE.ARM.toFixed(3)} : ${SAE.ARM.toFixed(3)}, 0.), tip) + o.yz;
+      glow += 0.15;
+      return saeTilt(vec3(q, 0.));
+    }
+    if(o.w > 1.5){
+      float t = fract(o.x + uTime * 0.22);
+      vec3 a = vec3(${SAE.IN_X.toFixed(3)}, -0.6 + o.z * 0.24, 0.), f = saeFeat(o.y), b = vec3(${SAE.PROBE_X.toFixed(3)}, 0., 0.);
+      vec3 q = t < 0.55 ? mix(a, f, t / 0.55) : mix(f, b, (t - 0.55) / 0.45);
+      alpha *= smoothstep(0., 0.06, t) * smoothstep(1., 0.9, t);
+      glow += 0.45;
+      return saeTilt(q + (aRnd.xyz - 0.5) * 0.025);
+    }
+    if(o.w > 0.5){
+      if(o.y > 0.5) glow += 0.8 + 0.7 * sin(uTime * 2.6 + o.x);
+      else alpha *= 0.45;
+    }
+    return p;
+  }
   if(i==${S.CANDLES}){
     // candles draw in left → right; the future is still noise
     float hidden = smoothstep(uCandle - 0.02, uCandle + 0.1, o.x);
@@ -277,7 +333,6 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
 
 // ---- Intro forms: eagle, rocket, neural sphere, transformer, whale, tiger, butterfly (hero.js, fauna.js)
 vec3 bez(vec3 a, vec3 b, vec3 c, float t){ return mix(mix(a, b, t), mix(b, c, t), t); }
-vec2 rot2(vec2 q, float a){ float c = cos(a), s = sin(a); return vec2(q.x * c - q.y * s, q.x * s + q.y * c); }
 vec2 cheetahPivot(int i){ // shoulder/hip of each cheetah leg
   ${CHEETAH_LEGS.map(([j], i) => `if(i == ${i}) return vec2(${(j[0][0] - CHEETAH_X).toFixed(3)}, ${j[0][1].toFixed(3)});`).join('\n  ')}
   return vec2(0.);
@@ -613,6 +668,7 @@ void main(){
 const FOG_COLORS = [
   ['#3b5bff', '#c8ff4d'], ['#7a3cff', '#3b5bff'], ['#11b5a0', '#3b5bff'], ['#3b5bff', '#8f5bff'], // intro, about, helix, zetaq
   ['#11b5a0', '#2f7bff'], ['#ff9d3c', '#11b5a0'], ['#ff9d3c', '#c8ff4d'], ['#ff4d6d', '#7a3cff'], // stack, chip, cart, megaphone
+  ['#2f7bff', '#c8ff4d'], ['#8f5bff', '#11b5a0'], // observatory, sae
   ['#c8ff4d', '#11b5a0'], ['#3ddc84', '#c8ff4d'], ['#ff9d3c', '#ff4d6d'], ['#2f7bff', '#11b5a0'], // candles, leaf, book, waves
   ['#ffb347', '#7a3cff'], ['#8f5bff', '#ff4d6d'], ['#2f7bff', '#11b5a0'], // solar, lattice, globe
 ]

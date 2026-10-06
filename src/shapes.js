@@ -302,6 +302,97 @@ export function chip(n) {
   ])
 }
 
+/* LLM Observatory — LLM calls stream in from SDK sources and land as spans on a trace
+   waterfall; a scan line sweeps the timeline and the failing span flashes (incident).
+   order.w: 1 span bar (x = timeline u, y = row) · 2 latency line (x = u) · 3 flow (x = phase,
+   y = source, z = row) · 4 source node (x = source). Tilt is applied in the shader too. */
+export const OBS_ROT = [0.14, -0.4, 0]
+export const OBS = { X0: -0.62, W: 2.15, ROW0: 0.42, DY: 0.19, SRC_X: -1.62, INCIDENT: 4 }
+const OBS_SPANS = [[0, 1], [0.04, 0.36], [0.1, 0.22], [0.4, 0.55], [0.47, 0.3], [0.62, 0.32], [0.82, 0.16]]
+export function observatory(n) {
+  const T = (p) => rotate(p, ...OBS_ROT)
+  const cx = OBS.X0 + OBS.W / 2, fw = 2.55, fh = 1.95
+  return compose(n, 201, [
+    [14, (i, c, r) => {
+      // the dashboard frame, its header rule and a faint time grid
+      const q = r()
+      if (q < 0.6) { const [x, y] = rectEdge(r, fw, fh); return T(jitter([cx + x, y - 0.05, 0], r, 0.006)) }
+      if (q < 0.8) return T(jitter([cx - fw / 2 + r() * fw, 0.58, 0], r, 0.005))
+      const g = Math.floor(r() * 5)
+      return T(jitter([OBS.X0 + (g / 4) * OBS.W, 0.52 - r() * 1.36, -0.02], r, 0.004))
+    }],
+    [42, (i, c, r) => {
+      // the span waterfall (a root call and its nested children)
+      const row = i % OBS_SPANS.length, [s, l] = OBS_SPANS[row]
+      const u = s + r() * l, y = OBS.ROW0 - row * OBS.DY + (r() - 0.5) * 0.085
+      return [...T(jitter([OBS.X0 + u * OBS.W, y, 0], r, 0.004)), u, row, 0, 1]
+    }],
+    [12, (i, c, r) => {
+      const u = r()
+      return [...T([OBS.X0 + u * OBS.W, 0.76, 0.01]), u, -1, -1, 2]
+    }],
+    [22, (i, c, r) => [...T([OBS.SRC_X, 0, 0]), r(), i % 3, Math.floor(r() * OBS_SPANS.length), 3]],
+    [10, (i, c, r) => {
+      // three provider sources the drop-in SDK instruments
+      const k = i % 3, d = randomOnSphere(r).map((v) => v * 0.13 * Math.cbrt(r()))
+      return [...T([OBS.SRC_X + d[0], 0.62 - k * 0.62 + d[1], d[2]]), k, -1, -1, 4]
+    }],
+  ])
+}
+
+/* BiasLens — a sparse autoencoder: token activations fan out into a wide feature grid where
+   only a few "bias features" fire; the probe reads them and a balance tips.
+   order.w: 1 feature (x = id, y = active) · 2 flow (x = phase, y = feature id, z = input) ·
+   3 balance (x = 0 beam / 1 left pan / 2 right pan, y,z = local offset) · 4 probe node. */
+export const SAE_ROT = [0.12, -0.38, 0]
+export const SAE = { IN_X: -1.8, GRID_X: -0.65, PROBE_X: 0.38, PIVOT: [1.38, 0.42], ARM: 0.55, HANG: 0.55 }
+const SAE_ACTIVE = [5, 14, 19, 26]
+const saeFeature = (k) => [SAE.GRID_X, -0.86 + Math.floor(k / 4) * 0.245, -0.45 + (k % 4) * 0.3]
+const saeInput = (k) => [SAE.IN_X, -0.6 + k * 0.24, 0]
+export function sae(n) {
+  const T = (p) => rotate(p, ...SAE_ROT)
+  const [px, py] = SAE.PIVOT
+  const bowl = (r) => {
+    // a pan: a shallow arc plus the two strings up to its hanging point
+    if (r() < 0.55) { const a = (r() - 0.5) * 2.2; return [Math.sin(a) * 0.27, -SAE.HANG - Math.cos(a) * 0.12 + 0.12] }
+    const s = r() < 0.5 ? -1 : 1, t = r()
+    return [s * 0.25 * t, -SAE.HANG * t]
+  }
+  return compose(n, 211, [
+    [12, (i, c, r) => {
+      const k = i % 6, d = randomOnSphere(r).map((v) => v * 0.075 * Math.cbrt(r()))
+      return T(saeInput(k).map((v, q) => v + d[q]))
+    }],
+    [30, (i, c, r) => {
+      const k = i % 32, d = randomOnSphere(r).map((v) => v * 0.06 * Math.cbrt(r()))
+      return [...T(saeFeature(k).map((v, q) => v + d[q])), k, SAE_ACTIVE.includes(k) ? 1 : 0, 0, 1]
+    }],
+    [8, (i, c, r) => {
+      // faint encoder weights from every input to the grid
+      const a = saeInput(Math.floor(r() * 6)), b = saeFeature(Math.floor(r() * 32))
+      return T(jitter(lerp3(a, b, r()), r, 0.004))
+    }],
+    [20, (i, c, r) => [...T(saeInput(0)), r(), SAE_ACTIVE[i % SAE_ACTIVE.length], Math.floor(r() * 6), 2]],
+    [6, (i, c, r) => {
+      const d = randomOnSphere(r).map((v) => v * 0.15 * Math.cbrt(r()))
+      return [...T([SAE.PROBE_X + d[0], d[1], d[2]]), 0, -1, -1, 4]
+    }],
+    [5, (i, c, r) => {
+      // the balance's post and base
+      if (r() < 0.7) return T(jitter([px, py - r() * 1.15, 0], r, 0.006))
+      return T(jitter([px + (r() - 0.5) * 0.6, py - 1.15, 0], r, 0.006))
+    }],
+    [7, (i, c, r) => {
+      const x = (r() * 2 - 1) * SAE.ARM, y = gauss(r) * 0.008
+      return [...T([px + x, py + y, 0]), 0, x, y, 3]
+    }],
+    [12, (i, c, r) => {
+      const side = i % 2, [x, y] = bowl(r)
+      return [...T([px + (side ? SAE.ARM : -SAE.ARM) + x, py + y, 0]), side ? 2 : 1, x, y, 3]
+    }],
+  ])
+}
+
 /* 3 — Candlestick chart (stock prediction). order.x = time (0 → 1, left → right) */
 export function candles(n) {
   const r0 = rng(99)
@@ -466,8 +557,8 @@ for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) for (let k = 0; k < G; k
 }
 // order2: z = skill-group ring (0 Languages, 1 Web, 2 AI/ML, 3 Data & tools), w = angle 0..1
 // Project "stars" orbit the lattice; skills link to them. order.x = project index.
-export const PROJECT_NODES = Array.from({ length: 10 }, (_, k) => {
-  const a = (k / 10) * TAU + 0.2
+export const PROJECT_NODES = Array.from({ length: 12 }, (_, k) => {
+  const a = (k / 12) * TAU + 0.2
   return [Math.cos(a) * 1.72, (k % 2 ? 0.5 : -0.4) + Math.sin(k * 1.7) * 0.2, Math.sin(a) * 1.72]
 })
 export function lattice(n) {
@@ -728,4 +819,4 @@ export function globe(n) {
 }
 
 // order matters: it is the order of the chapters on the page
-export const SHAPES = [neuralSphere, monogram, helix, pipeline, stack, chip, cart, megaphone, candles, leaf, book, aquarium, solar, lattice, globe]
+export const SHAPES = [neuralSphere, monogram, helix, pipeline, stack, chip, cart, megaphone, observatory, sae, candles, leaf, book, aquarium, solar, lattice, globe]
