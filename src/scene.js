@@ -13,8 +13,7 @@ import {
   PIPE_ROT, STACK_ROT, CHIP_ROT, SOLAR_ROT, CART_ROT, MEGA_ROT, AQUA_ROT, AQUA, BIO_ROT, ROBOT, OBS_ROT, OBS, SAE_ROT, SAE,
 } from './shapes.js'
 import { HERO_SHAPES, HERO_COLORS, HERO_NAMES, HERO_SEQUENCE } from './hero.js'
-import { CHEETAH_LEGS, CHEETAH_X } from './mammals.js'
-import { HEART_CENTRES } from './heart.js'
+import { HERO_ANIM } from './heroShader.js'
 
 const PI = Math.PI
 const DEG = PI / 180
@@ -73,7 +72,8 @@ attribute vec4 aRnd;
 uniform float uTime, uI0, uI1, uF, uScatter, uSize, uPR, uDim, uSpin, uSpinG, uPulseT, uMouseF, uScale;
 uniform float uIntro, uCandle, uLeaf, uBook, uFocusAmt, uMouseR, uGain, uRelN;
 uniform vec4 uRel[8];
-uniform float uHA, uHB, uHF, uEntry;
+uniform float uHA, uHB, uHF, uEntry, uClock;
+uniform vec2 uHeroRot;
 uniform vec3 uHP[${HERO_SHAPES.length}], uHS[${HERO_SHAPES.length}];
 uniform vec3 uMouse, uPulseO, uColA, uColB, uColC, uFocus, uLeafBase, uStA, uStB;
 uniform vec2 uTilt;
@@ -331,127 +331,9 @@ vec3 living(int i, vec3 p, vec4 o, inout float alpha, inout float glow){
   return p;
 }
 
-// ---- Intro forms: eagle, rocket, neural sphere, transformer, whale, tiger, butterfly (hero.js, fauna.js)
+// ---- Intro forms (hero.js; their motion is in heroShader.js)
 vec3 bez(vec3 a, vec3 b, vec3 c, float t){ return mix(mix(a, b, t), mix(b, c, t), t); }
-vec2 cheetahPivot(int i){ // shoulder/hip of each cheetah leg
-  ${CHEETAH_LEGS.map(([j], i) => `if(i == ${i}) return vec2(${(j[0][0] - CHEETAH_X).toFixed(3)}, ${j[0][1].toFixed(3)});`).join('\n  ')}
-  return vec2(0.);
-}
-const vec3 HEART_V = vec3(${HEART_CENTRES.ventricles.map((v) => v.toFixed(3)).join(', ')});
-const vec3 HEART_A = vec3(${HEART_CENTRES.atria.map((v) => v.toFixed(3)).join(', ')});
-
-vec3 heroAnim(int h, vec3 p, vec4 o, inout float alpha, inout float glow){
-  float part = o.w;
-  if(part > 7.5 && part < 8.5){ // drifting sparkles
-    p += vec3(sin(uTime * 0.4 + o.y * 20.) * 0.12, sin(uTime * 0.3 + o.y * 13.) * 0.14, 0.);
-    alpha *= 0.3 + 0.7 * abs(sin(uTime * 1.7 + o.y * 30.));
-  }
-  if(h == 0){ // golden eagle
-    float strong = 1. - smoothstep(0.72, 1., uEntry); // powerful wingbeats while arriving, a glide after
-    if(part > 0.5 && part < 1.5){
-      float side = o.z, s = o.y, w = uTime * mix(1.1, 5.2, strong);
-      float th = side * ((0.045 + 0.5 * strong) * sin(w) + (0.035 + 0.32 * strong) * sin(w - 0.9) * smoothstep(0.35, 0.7, s));
-      p.xy = rot2(p.xy - vec2(side * 0.16, 0.06), th) + vec2(side * 0.16, 0.06);
-    }
-    if(part > 10.5 && part < 11.5) p.x += sin(uTime * 0.9) * 0.04 * o.y;
-    vec3 rest = rotZ(rotY(rotX(p, -0.55), 0.35 + sin(uTime * 0.3) * 0.12), 0.2 + sin(uTime * 0.45) * 0.08)
-              + vec3(0., sin(uTime * 1.1) * 0.05, 0.);
-    if(uEntry >= 1.) return rest;
-    // arrival: sweeps in from far behind, banking through a curve, then settles into the glide.
-    // A few particles lag a little behind their neighbours and draw motion streaks.
-    float lag = step(0.7, aRnd.y) * aRnd.z * 0.075;
-    float t = clamp(uEntry * 1.08 - lag, 0., 1.);
-    float et = 1. - pow(1. - t, 2.2);
-    vec3 A = vec3(9., 5.5, -24.), B = vec3(-7.5, 2.2, -2.5), C = vec3(0.);
-    vec3 v = normalize(mix(B - A, C - B, et) + vec3(0., 0., 1e-3));
-    float yaw = atan(v.x, v.z), pitch = -atan(v.y, length(v.xz)), bank = sin(PI * et) * 0.95;
-    vec3 fly = rotY(rotX(rotZ(p, bank), pitch), yaw) + bez(A, B, C, et);
-    glow += lag * 6.;
-    return mix(fly, rest, smoothstep(0.84, 1., t));
-  }
-  if(h == 1){ // rocket: rolling, with a live plume
-    if(part > 1.5 && part < 2.5){
-      float t = fract(fract(o.y * 13.37) + uTime * 1.7), ang = o.y * 6.2831;
-      float rr = 0.27 * o.z * (1. - t * 0.55) * (0.75 + 0.25 * sin(t * 20. - uTime * 15.));
-      p = vec3(cos(ang) * rr, -1.05 - t * 1.15, sin(ang) * rr);
-      alpha *= (1. - t) * 1.2;
-      glow += 1.4 * (1. - t);
-    }
-    return rotZ(rotY(p, uTime * 0.7), -0.3) + vec3(0., sin(uTime * 1.3) * 0.06, 0.);
-  }
-  if(h == 2) return rotY(p, uSpin);
-  if(h == 3) return rotY(p, -0.5 + sin(uTime * 0.4) * 0.25); // transformer
-  if(h == 4){ // blue whale: the body undulates to the flukes, the blowhole spouts
-    if(part > 2.5 && part < 3.5) p.y += sin(uTime * 1.3 - o.y * 3.6) * 0.2 * pow(1. - o.y, 2.4);
-    if(part > 8.5){
-      float t = fract(o.y + uTime * 0.45), sp = t * 0.38;
-      p += vec3(cos(o.z) * sp, t * 1.05 - t * t * 0.35, sin(o.z) * sp);
-      alpha *= 1. - t; glow += 0.5;
-    }
-    return rotZ(rotY(rotX(p, 0.18), -0.55 + sin(uTime * 0.2) * 0.1), 0.04) + vec3(0., sin(uTime * 0.8) * 0.06, 0.);
-  }
-  if(h == 5 || h == 7){ // tiger, red fox: a slow walk (diagonal legs in step), swishing tail
-    float w = uTime * (h == 5 ? 2.1 : 2.5);
-    if(part > 11.5 && part < 15.5){
-      float li = part - 12.;
-      float ph = (li < 0.5 || li > 2.5) ? 0. : PI;
-      float lift = max(0., sin(w + ph + 1.2)) * 0.05; // paws lift on the forward swing
-      p.xy = rot2(p.xy - o.yz, (h == 5 ? 0.26 : 0.3) * sin(w + ph)) + o.yz;
-      p.y += lift * smoothstep(-0.2, -0.8, p.y);
-    }
-    if(part > 4.5 && part < 5.5){
-      if(h == 5){ p.z += sin(uTime * 1.6 + o.y * 2.) * 0.22 * o.y; p.y += sin(uTime * 1.1) * 0.06 * o.y; }
-      else { p.z += sin(uTime * 1.2 + o.y * 1.6) * 0.14 * o.y; p.y += sin(uTime * 0.9) * 0.05 * o.y; }
-    }
-    p.y += sin(w * 2.) * 0.012;
-    return h == 5 ? rotY(rotX(p, 0.12), -0.45 + sin(uTime * 0.25) * 0.1) : rotY(rotX(p, 0.1), -0.5 + sin(uTime * 0.25) * 0.12);
-  }
-  if(h == 8){ // cheetah: a slow-motion rotary gallop; each leg swings from the shoulder/hip and folds at the knee
-    float s = uTime * 4.2;
-    if(part > 11.5 && part < 19.5){
-      float li = mod(part - 12., 4.);
-      float rear = step(1.5, li);
-      float ph = rear * PI + (mod(li, 2.) > 0.5 ? 0.45 : 0.);
-      float th = mix(0.62, 0.55, rear) * sin(s + ph);
-      if(part > 15.5) p.xy = rot2(p.xy - o.yz, -1.05 * max(0., cos(s + ph))) + o.yz; // tuck during the forward swing
-      vec2 pv = cheetahPivot(int(li + 0.5));
-      p.xy = rot2(p.xy - pv, th) + pv;
-    }
-    if(part > 4.5 && part < 5.5){ p.y += sin(s + 1.2) * 0.1 * o.y * o.y; p.z += sin(uTime * 0.9) * 0.08 * o.y; }
-    if(part > 20.5 && part < 21.5){ // dust kicked back from the paws
-      float t = fract(o.y + uTime * 0.8);
-      p = vec3(0.7 - t * 2.8, -0.98 + t * (0.1 + o.z * 0.25) - t * t * 0.1, p.z * (1. + t));
-      alpha *= sin(PI * t) * 0.7;
-    }
-    p.y += sin(2. * s) * 0.035;
-    p = rotZ(p, sin(s + 0.6) * 0.035);
-    return rotY(rotX(p, 0.08), -0.32 + sin(uTime * 0.2) * 0.08);
-  }
-  if(h == 9){ // red squirrel: nibbles the nut in bursts, tail sways, breathes
-    float burst = step(0.2, sin(uTime * 0.9));
-    float nib = (0.5 + 0.5 * sin(uTime * 11.)) * burst;
-    if(part > 21.5 && part < 22.5) p.xy = rot2(p.xy - o.yz, -0.045 * nib + 0.05 * sin(uTime * 0.45)) + o.yz;
-    if(part > 22.5 && part < 23.5){ p.y += nib * 0.014; p.x -= nib * 0.006; }
-    if(part > 4.5 && part < 5.5){ p.x += sin(uTime * 1.1 + o.y * 3.) * 0.05 * o.y; p.z += sin(uTime * 0.8 + o.y * 2.) * 0.07 * o.y; }
-    p.y += sin(uTime * 2.4) * 0.008;
-    return rotY(rotX(p, 0.05), -0.55 + sin(uTime * 0.3) * 0.15);
-  }
-  if(h == 10){ // heart: lub-dub at ~66 bpm. Atria squeeze, then the ventricles; the arteries pulse
-    float bt = fract(uTime * 1.1);
-    float atr = exp(-pow((bt - 0.06) / 0.05, 2.));
-    float ven = smoothstep(0.1, 0.2, bt) * (1. - smoothstep(0.32, 0.55, bt));
-    if(o.y < 0.5){ vec3 c = HEART_V; p = c + (p - c) * vec3(1. - 0.075 * ven, 1. - 0.045 * ven, 1. - 0.075 * ven); glow += ven * 0.2; }
-    else if(o.y < 1.5){ vec3 c = HEART_A; p = c + (p - c) * (1. - 0.07 * atr); }
-    else { glow += ven * 0.25; p = p * (1. + 0.015 * ven); } // the arteries swell with each beat
-    return rotY(rotX(p, 0.05), 0.1 + sin(uTime * 0.35) * 0.4);
-  }
-  // butterfly: wings flap
-  if(part > 5.5 && part < 6.5){
-    float a = 0.12 + 0.62 * (0.5 + 0.5 * sin(uTime * 3.4));
-    p = vec3(p.x * cos(a), p.y, abs(p.x) * sin(a) + p.z);
-  }
-  return rotX(p, -0.4) + vec3(0., sin(uTime * 1.6) * 0.08, 0.);
-}
+${HERO_ANIM}
 // Colour of a particle: integer part = tint (0 primary, 1 secondary, 2 neutral, 3 dark, 4 glowing
 // accent, 5 black); fractional part = baked lighting (0 means unlit).
 vec3 heroTint(int h, float raw, inout float alpha, inout float glow){
@@ -482,12 +364,12 @@ void main(){
   vec3 heroCol = vec3(1.);
   float htr = 0.;
   if(i0 == 0){
-    // the intro form morphs between two of the seven forms on its own clock
+    // the intro form morphs between two of its forms on its own clock
     int hA = int(uHA + 0.5), hB = int(uHB + 0.5);
     float hs = aRnd.w * 0.45, hf = smoothstep(hs, hs + 0.55, uHF);
     float a1 = 1., a2 = 1., g1 = 0., g2 = 0.;
     vec3 ca = heroTint(hA, aOA.x, a1, g1), cb = heroTint(hB, aOC.x, a2, g2);
-    a = mix(heroAnim(hA, aA, aOA, a1, g1), heroAnim(hB, aC, aOC, a2, g2), hf);
+    a = mix(heroPose(hA, aA, aOA, a1, g1), heroPose(hB, aC, aOC, a2, g2), hf);
     alA = mix(a1, a2, hf); glA = mix(g1, g2, hf);
     heroCol = mix(ca, cb, hf);
     htr = sin(hf * PI);
@@ -680,7 +562,7 @@ const TIERS = [
 ]
 
 export async function createScene(canvas, opts = {}) {
-  const { onShapeChange, onProgress, onFrame, onPulse, onHero, labels = {} } = opts
+  const { onShapeChange, onProgress, onFrame, onPulse, onHero, labels = {}, heroArrows = [] } = opts
   const reducedMQ = matchMedia('(prefers-reduced-motion: reduce)')
   const coarse = matchMedia('(pointer: coarse)').matches
   const cores = navigator.hardwareConcurrency || 4
@@ -739,7 +621,12 @@ export async function createScene(canvas, opts = {}) {
     worker.onerror = () => { worker.terminate(); buildLocally() }
     worker.postMessage({ k: pending.shift(), n: MAX })
   } catch { setTimeout(buildLocally, 500) }
-  const hero = { t: 0, a: HERO_SEQUENCE[0], b: HERO_SEQUENCE[1], f: 0, shown: -1 }
+  // pos: place in the sequence; dir: the step being morphed (0 = holding); m: morph progress;
+  // held: the visitor turned this form by hand, so it stays until they step on
+  const hero = { pos: 0, dir: 0, m: 0, hold: 0, queue: 0, held: false, a: HERO_SEQUENCE[0], b: HERO_SEQUENCE[1], f: 0, shown: -1, manual: false }
+  const heroRot = { x: 0, y: 0, vx: 0, vy: 0, dragging: false, last: 0 }
+  const heroScreen = { x: 0, y: 0, r: 0 } // where the form is on screen (centre and radius, px)
+  const clock0 = (() => { const d = new Date(); return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000 - performance.now() / 1000 })()
   let boundA = null, boundB = -1, boundC = -1
   function bind(i0, i1) {
     const keyA = i0 === 0 ? 'h' + hero.a : i0
@@ -759,7 +646,7 @@ export async function createScene(canvas, opts = {}) {
   const flat = Array.from({ length: JOURNEY }, () => new Vector3())
 
   const uniforms = {
-    uHA: { value: 0 }, uHB: { value: 1 }, uHF: { value: 0 }, uEntry: { value: reducedMQ.matches ? 1 : 0 },
+    uHA: { value: 0 }, uHB: { value: 1 }, uHF: { value: 0 }, uEntry: { value: reducedMQ.matches ? 1 : 0 }, uClock: { value: 0 }, uHeroRot: { value: new Vector2() },
     uHP: { value: HERO_COLORS.map((c) => new Vector3(...hex(c[0]))) },
     uHS: { value: HERO_COLORS.map((c) => new Vector3(...hex(c[1]))) },
     uTime: { value: 0 }, uI0: { value: 0 }, uI1: { value: 1 }, uF: { value: 0 }, uScatter: { value: 0 },
@@ -767,7 +654,7 @@ export async function createScene(canvas, opts = {}) {
     uSpin: { value: 0 }, uSpinG: { value: 0 }, uScale: { value: 1 },
     uPulseT: { value: 10 }, uPulseO: { value: new Vector3() },
     uMouse: { value: new Vector3(99, 99, 0) }, uMouseF: { value: 0 }, uMouseR: { value: 0.9 },
-    uIntro: { value: 0 }, // the old big-bang intro is replaced by the eagle's arrival (uEntry)
+    uIntro: { value: 0 }, // the old big-bang intro is replaced by the butterfly's arrival (uEntry)
     uCandle: { value: 1 }, uLeaf: { value: 1 }, uBook: { value: 0 },
     uFocus: { value: new Vector3() }, uFocusAmt: { value: 0 },
     uRel: { value: Array.from({ length: 8 }, () => new Vector4()) }, uRelN: { value: 0 },
@@ -844,7 +731,7 @@ export async function createScene(canvas, opts = {}) {
     }
   })
 
-  // ---- Soft colour aura behind the intro form (golden for the eagle, and so on)
+  // ---- Soft colour aura behind the intro form (blue for the butterfly, and so on)
   const auraUni = { uCol: { value: new Vector3() }, uAlpha: { value: 0 }, uSize: { value: 6 }, uTime: { value: 0 } }
   const aura = new Mesh(new PlaneGeometry(1, 1), new ShaderMaterial({
     uniforms: auraUni, transparent: true, depthWrite: false, depthTest: false, blending: AdditiveBlending,
@@ -1107,6 +994,7 @@ export async function createScene(canvas, opts = {}) {
 
   addEventListener('pointerdown', (e) => {
     if (e.target.closest('a, button, input, textarea, select, label, dialog, [data-no-pulse]')) return
+    if (scrollY < innerHeight * 0.5 && Math.hypot(e.clientX - heroScreen.x, e.clientY - heroScreen.y) < heroScreen.r * 1.1) return // that's a turn of the intro form
     const nx = (e.clientX / innerWidth) * 2 - 1, ny = -(e.clientY / innerHeight) * 2 + 1
     screenToWorld(nx, ny, uniforms.uPulseO.value)
     uniforms.uPulseT.value = 0
@@ -1176,23 +1064,39 @@ export async function createScene(canvas, opts = {}) {
     const j = MathUtils.clamp(cur.morph, 0, JOURNEY - 1)
     const i0 = Math.floor(j), i1 = Math.min(i0 + 1, JOURNEY - 1), f = j - i0
     const st = reduced ? flat : stations
-    // intro forms: hold each one, then morph into the next, on a loop (paused while scrolled away)
-    if (!reduced && !intro && j < 1.5) hero.t += Math.max(0, dt) // rAF time can start slightly behind `prev`
-    const HOLD = 3.4, PERIOD = 5.2
-    let cyc = Math.floor(hero.t / PERIOD), local = hero.t - cyc * PERIOD
-    const L = HERO_SEQUENCE.length
-    let pos = ((cyc % L) + L) % L
-    if (!heroPos[HERO_SEQUENCE[pos]]) { hero.t = HOLD; cyc = 0; local = HOLD; pos = 0 } // (only after a debug jump)
-    if (local > HOLD && !heroPos[HERO_SEQUENCE[(pos + 1) % L]]) { hero.t = cyc * PERIOD + HOLD; local = HOLD } // next form still sculpting
-    hero.a = HERO_SEQUENCE[pos]
-    hero.b = HERO_SEQUENCE[(pos + 1) % L]
-    const hx = MathUtils.clamp((local - HOLD) / (PERIOD - HOLD), 0, 1)
-    hero.f = hx * hx * (3 - 2 * hx)
+    // intro forms: hold each one, then morph into the next, on a loop (paused while scrolled away).
+    // The arrows step either way; a form the visitor has turned by hand stays until they step on.
+    const HOLD = 3.4, L = HERO_SEQUENCE.length
+    if (!heroPos[HERO_SEQUENCE[hero.pos]]) { hero.pos = 0; hero.dir = 0; hero.m = 0 } // (only after a debug jump)
+    if (!intro && j < 1.5 && !reduced) {
+      const dts = Math.max(0, dt) // rAF time can start slightly behind `prev`
+      if (!hero.dir && !hero.held && !heroRot.dragging) { hero.hold += dts; if (hero.hold > HOLD) { hero.dir = 1; hero.manual = false } }
+      if (hero.dir && heroPos[HERO_SEQUENCE[(hero.pos + hero.dir + L) % L]]) { // (waits while the next form is still sculpting)
+        hero.m += dts / (hero.manual ? 1.1 : 1.8)
+        if (hero.m >= 1) {
+          hero.pos = (hero.pos + hero.dir + L) % L; hero.m = 0; hero.dir = 0; hero.hold = 0
+          if (hero.queue) { hero.dir = hero.queue; hero.queue = 0; hero.manual = true }
+        }
+      }
+    } else if (reduced && hero.dir) { hero.pos = (hero.pos + hero.dir + L) % L; hero.dir = 0; hero.m = 0 } // no morphs: step at once
+    const nextPos = (hero.pos + (hero.dir || 1) + L) % L
+    hero.a = HERO_SEQUENCE[hero.pos]
+    hero.b = HERO_SEQUENCE[nextPos]
+    hero.f = hero.m * hero.m * (3 - 2 * hero.m)
     uniforms.uHA.value = hero.a
     uniforms.uHB.value = hero.b
     uniforms.uHF.value = hero.f
-    const showing = hero.f > 0.5 ? (pos + 1) % L : pos
+    const showing = hero.f > 0.5 ? nextPos : hero.pos
     if (showing !== hero.shown) { hero.shown = showing; onHero?.(showing, HERO_NAMES[HERO_SEQUENCE[showing]], L) }
+    // hand rotation: follows the drag, coasts on release, and eases home once the visitor steps on
+    if (!heroRot.dragging) {
+      heroRot.y += heroRot.vy * dt; heroRot.x += heroRot.vx * dt
+      heroRot.vx *= Math.exp(-dt * 3); heroRot.vy *= Math.exp(-dt * 3)
+      if (!hero.held) { const k = 1 - Math.exp(-dt * 2.5); heroRot.x -= heroRot.x * k; heroRot.y -= heroRot.y * k }
+    }
+    heroRot.x = MathUtils.clamp(heroRot.x, -1.1, 1.1)
+    uniforms.uHeroRot.value.set(heroRot.x, heroRot.y)
+    uniforms.uClock.value = clock0 + now / 1000
     bind(i0, i1)
     uniforms.uI0.value = i0
     uniforms.uI1.value = i1
@@ -1255,7 +1159,7 @@ export async function createScene(canvas, opts = {}) {
     uniforms.uMouseF.value += (mf - uniforms.uMouseF.value) * (1 - Math.exp(-dt * 4))
     if (!reduced) uniforms.uPulseT.value += dt
 
-    // intro: the eagle sweeps in (the shader eases uEntry along its flight path)
+    // intro: the butterfly sweeps in (the shader eases uEntry along its flight path)
     if (intro) {
       intro.t += Math.max(0, dt)
       const x = Math.min(1, intro.t / intro.dur)
@@ -1294,6 +1198,7 @@ export async function createScene(canvas, opts = {}) {
     arcMat.opacity = ga * 0.9
     if (visitor) arcGeo.setDrawRange(0, Math.round(MathUtils.clamp((ga - 0.3) / 0.7, 0, 1) * (ARC + 1)))
 
+    placeHeroArrows(rigAlpha(0) * uniforms.uEntry.value)
     labelAt(labels.home, homeN, globeRig, ga)
     labelAt(labels.visitor, visitorN, globeRig, visitor ? ga : 0)
     const la = rigAlpha(S.LATTICE)
@@ -1341,6 +1246,30 @@ export async function createScene(canvas, opts = {}) {
 
   // project a rig-local point to the screen and position a DOM label there
   const _w = new Vector3(), _n = new Vector3(), _c = new Vector3()
+  // the arrows sit either side of the intro form, wherever it is on screen
+  const _e = new Vector3()
+  function placeHeroArrows(alpha) {
+    const c = stations[0]
+    _w.copy(c).project(camera)
+    _e.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(2.15 * uniforms.uScale.value).add(c).project(camera)
+    heroScreen.x = ((_w.x + 1) / 2) * innerWidth; heroScreen.y = ((1 - _w.y) / 2) * innerHeight
+    heroScreen.r = Math.abs(_e.x - _w.x) * innerWidth / 2
+    const on = alpha > 0.3
+    heroArrows.forEach((el, k) => {
+      if (!el) return
+      const x = Math.min(innerWidth - 28, Math.max(28, heroScreen.x + (k ? 1 : -1) * heroScreen.r))
+      el.style.transform = `translate(${x}px, ${heroScreen.y}px) translate(-50%, -50%)`
+      el.style.opacity = on ? '' : 0
+      el.style.pointerEvents = on ? '' : 'none'
+      el.tabIndex = on ? 0 : -1
+    })
+  }
+  function heroStep(d) {
+    hero.held = false
+    if (hero.dir) { if (!hero.queue && d === hero.dir) hero.queue = d; else if (d !== hero.dir) { hero.pos = (hero.pos + hero.dir + HERO_SEQUENCE.length) % HERO_SEQUENCE.length; hero.m = 1 - hero.m; hero.dir = d; hero.queue = 0 } ; return }
+    hero.dir = d; hero.m = 0; hero.manual = true
+  }
+
   function labelAt(el, local, rig, alpha, always = false) {
     if (!el) return
     if (!local || alpha < 0.05) { el.style.opacity = 0; return }
@@ -1395,9 +1324,22 @@ export async function createScene(canvas, opts = {}) {
     setGyro(x, y) { gyro.on = true; gyro.x = MathUtils.clamp(x, -1, 1); gyro.y = MathUtils.clamp(y, -1, 1) },
     setVisitor,
     get tier() { return tier },
-    setHero(k) { hero.t = Math.max(0, HERO_SEQUENCE.indexOf(k)) * 5.2 }, // k = form slot
-    setEntry(v) { uniforms.uEntry.value = v; if (intro) intro.t = intro.dur * v }, // debug: scrub the eagle's arrival
+    setHero(k) { hero.pos = Math.max(0, HERO_SEQUENCE.indexOf(k)); hero.dir = 0; hero.m = 0; hero.hold = 0 }, // debug: k = form slot
+    heroStep, // -1 previous form, 1 next
+    // hand rotation of the intro form; a turned form stays until the visitor steps on
+    overHero(cx, cy) { return Math.hypot(cx - heroScreen.x, cy - heroScreen.y) < heroScreen.r * 1.1 && uniforms.uEntry.value >= 1 },
+    heroDragStart() { heroRot.dragging = true; heroRot.vx = heroRot.vy = 0; heroRot.last = performance.now() },
+    heroDrag(dx, dy) {
+      const t = performance.now(), dts = Math.max(8, t - heroRot.last) / 1000
+      const ay = dx * 0.009, ax = dy * 0.007
+      heroRot.y += ay; heroRot.x += ax
+      heroRot.vy = MathUtils.clamp(ay / dts, -6, 6); heroRot.vx = MathUtils.clamp(ax / dts, -6, 6)
+      heroRot.last = t
+      if (Math.abs(dx) + Math.abs(dy) > 1) hero.held = true
+    },
+    heroDragEnd() { heroRot.dragging = false; if (performance.now() - heroRot.last > 80) heroRot.vx = heroRot.vy = 0 },
+    setEntry(v) { uniforms.uEntry.value = v; if (intro) intro.t = intro.dur * v }, // debug: scrub the butterfly's arrival
     get settled() { return Math.abs(sample(scrollY).morph - cur.morph) < 0.02 },
-    get debug() { return { focus: uniforms.uFocusAmt.value, focusTarget, morph: cur.morph, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
+    get debug() { return { hero: { ...hero, rot: { ...heroRot } }, focus: uniforms.uFocusAmt.value, focusTarget, morph: cur.morph, y: scrollY, target: sample(scrollY).morph, cur: cur.morph, stops: stops.map((q) => [q.shape, Math.round(q.top), Math.round(q.b), Math.round(q.T)]) } },
   }
 }

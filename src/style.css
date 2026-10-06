@@ -545,6 +545,22 @@ button.btn { font-family: inherit; cursor: pointer; }
 .geo-label--home i, .geo-label--skill i { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 .geo-label--skill { color: var(--accent); }
 .is-dragging, .is-dragging * { user-select: none; -webkit-user-select: none; }
+
+/* Intro form: arrows either side of it (placed by the scene), and drag to turn it */
+.hero-arrow {
+  position: fixed; left: 0; top: 0; z-index: 30;
+  display: grid; place-items: center; width: 44px; height: 44px; padding: 0;
+  border: 1px solid transparent; border-radius: 50%; background: transparent;
+  color: var(--fg); opacity: 0.22; cursor: pointer;
+  transition: opacity 0.35s ease, border-color 0.35s ease, background-color 0.35s ease;
+}
+.hero-arrow svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.hero-arrow:hover, .hero-arrow:focus-visible { opacity: 0.9; border-color: var(--line); background: rgba(10, 10, 12, 0.35); outline: none; }
+.hero-arrow:active svg { transform: scale(0.88); }
+.over-hero .hero, .over-hero .webgl { cursor: grab; }
+.is-turning, .is-turning * { cursor: grabbing !important; }
+@media (pointer: coarse) { .hero-arrow { opacity: 0.4; } }
+.no-webgl .hero-arrow { display: none; }
 .has-cursor.cursor-on .drag-zone { cursor: none; }
 
 /* Sound toggle */
